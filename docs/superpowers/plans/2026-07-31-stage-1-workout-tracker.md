@@ -1278,7 +1278,7 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
             self.session = session
             self.builder = builder
             self.startDate = start
-            emit(at: start)
+            emit()
         } catch {
             throw WorkoutRecordingError.sessionFailed(error)
         }
@@ -1318,11 +1318,15 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
         )
     }
 
-    private func emit(at date: Date) {
-        guard let startDate else { return }
+    /// `HKLiveWorkoutBuilder.elapsedTime` already excludes time spent paused,
+    /// which is exactly the contract `LiveMetrics.elapsed` documents. Deriving
+    /// elapsed from wall-clock instead would let one traffic-light pause shift
+    /// every run/walk transition and segment boundary for the rest of the run.
+    private func emit() {
+        guard let builder else { return }
         continuation?.yield(
             LiveMetrics(
-                elapsed: date.timeIntervalSince(startDate),
+                elapsed: builder.elapsedTime,
                 distanceMeters: latestDistance,
                 heartRate: latestHeartRate,
                 activeEnergyKcal: latestEnergy
@@ -1376,7 +1380,7 @@ extension HealthKitWorkoutRecorder: HKLiveWorkoutBuilderDelegate {
                     continue
                 }
             }
-            self.emit(at: Date())
+            self.emit()
         }
     }
 }
