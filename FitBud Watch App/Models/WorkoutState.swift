@@ -15,6 +15,23 @@ struct WorkoutState: Equatable, Sendable {
     var runWalkPhase: RunWalkPhase?
     var phaseRemaining: TimeInterval?
 
+    /// The zone the latest heart-rate sample falls in, or `nil` when there is no
+    /// sample or it is below the lowest training zone.
+    var currentZone: HRZone?
+
+    /// Seconds spent in each zone, keyed by `HRZone.id`. Only intervals with a
+    /// heart-rate sample are attributed, so this can total less than `elapsed`.
+    var timeInZone: [String: TimeInterval] = [:]
+
+    /// Running mean of the heart-rate samples seen so far. This is for live
+    /// display only — `CompletedWorkout.averageHeartRate` uses HealthKit's own
+    /// time-weighted average, which is the authoritative figure.
+    var averageHeartRate: Double?
+
+    /// Fraction of the current run/walk phase still remaining, 1 → 0. `nil` for
+    /// sessions with no run/walk configured.
+    var phaseRemainingFraction: Double?
+
     var splits: [Split] = []
     var isComplete = false
 

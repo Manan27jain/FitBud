@@ -20,6 +20,9 @@ struct WorkoutEngine {
     private var lastPhase: RunWalkPhase?
     private var lastBlockIndex: Int?
     private var hasFinished = false
+    private var lastElapsed: TimeInterval?
+    private var heartRateSum: Double = 0
+    private var heartRateCount: Int = 0
 
     private(set) var state = WorkoutState()
 
@@ -37,6 +40,24 @@ struct WorkoutEngine {
         state.heartRate = metrics.heartRate
         state.activeEnergyKcal = metrics.activeEnergyKcal
 
+        // Attribute the interval since the previous sample to the zone the
+        // athlete is in now. A sample with no heart rate is attributed to
+        // nothing at all rather than being guessed at — a fabricated zone would
+        // corrupt the one number the training plan is judged on.
+        if let bpm = metrics.heartRate {
+            let zone = HRZone.zone(for: bpm)
+            state.currentZone = zone
+            if let zone, let last = lastElapsed, metrics.elapsed > last {
+                state.timeInZone[zone.id, default: 0] += metrics.elapsed - last
+            }
+            heartRateSum += bpm
+            heartRateCount += 1
+            state.averageHeartRate = heartRateSum / Double(heartRateCount)
+        } else {
+            state.currentZone = nil
+        }
+        lastElapsed = metrics.elapsed
+
         var events: [WorkoutEvent] = []
 
         let splits = splitDetector.update(
@@ -51,6 +72,7 @@ struct WorkoutEngine {
             let phase = runWalk.phase(at: metrics.elapsed)
             state.runWalkPhase = phase
             state.phaseRemaining = runWalk.remainingInPhase(at: metrics.elapsed)
+            state.phaseRemainingFraction = runWalk.remainingFraction(at: metrics.elapsed)
             if phase != lastPhase {
                 if lastPhase != nil { events.append(.phaseChanged(phase)) }
                 lastPhase = phase

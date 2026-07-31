@@ -148,3 +148,59 @@ struct WorkoutHapticMappingTests {
         #expect(Set(haptics).count == haptics.count)
     }
 }
+
+struct WorkoutEngineZoneTests {
+    private func easyRunEngine() -> WorkoutEngine {
+        WorkoutEngine(
+            timeline: SegmentTimeline(segments: [.openEnded(zone: "Z2", label: "Easy")]),
+            runWalk: RunWalkCycler(runSeconds: 240, walkSeconds: 60)
+        )
+    }
+
+    @Test func classifiesTheCurrentZoneFromHeartRate() {
+        var engine = easyRunEngine()
+        _ = engine.ingest(LiveMetrics(elapsed: 10, heartRate: 155))
+        #expect(engine.state.currentZone?.id == "Z2")
+    }
+
+    @Test func currentZoneIsNilWithoutAHeartRateSample() {
+        var engine = easyRunEngine()
+        _ = engine.ingest(LiveMetrics(elapsed: 10))
+        #expect(engine.state.currentZone == nil)
+    }
+
+    @Test func accumulatesTimeInEachZoneAcrossTheInterval() {
+        var engine = easyRunEngine()
+        _ = engine.ingest(LiveMetrics(elapsed: 0, heartRate: 155))    // Z2
+        _ = engine.ingest(LiveMetrics(elapsed: 60, heartRate: 155))   // +60s Z2
+        _ = engine.ingest(LiveMetrics(elapsed: 90, heartRate: 185))   // +30s Z4
+        #expect(engine.state.timeInZone["Z2"] == 60)
+        #expect(engine.state.timeInZone["Z4"] == 30)
+    }
+
+    @Test func attributesNothingForSamplesWithoutAHeartRate() {
+        var engine = easyRunEngine()
+        _ = engine.ingest(LiveMetrics(elapsed: 0, heartRate: 155))
+        _ = engine.ingest(LiveMetrics(elapsed: 60))                   // no HR
+        #expect(engine.state.timeInZone["Z2"] == nil)
+        #expect(engine.state.timeInZone.isEmpty)
+    }
+
+    @Test func timeInZoneNeverExceedsElapsed() {
+        var engine = easyRunEngine()
+        for second in stride(from: 0, through: 300, by: 10) {
+            _ = engine.ingest(LiveMetrics(elapsed: Double(second), heartRate: 155))
+        }
+        let total = engine.state.timeInZone.values.reduce(0, +)
+        #expect(total <= engine.state.elapsed)
+    }
+
+    @Test func reportsRunningAverageHeartRateAndPhaseFraction() {
+        var engine = easyRunEngine()
+        _ = engine.ingest(LiveMetrics(elapsed: 0, heartRate: 150))
+        _ = engine.ingest(LiveMetrics(elapsed: 120, heartRate: 160))
+        #expect(engine.state.averageHeartRate == 155)
+        // Halfway through a 240s run interval.
+        #expect(abs((engine.state.phaseRemainingFraction ?? 0) - 0.5) < 0.001)
+    }
+}
