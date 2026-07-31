@@ -5,7 +5,7 @@ struct LiveWorkoutView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(format(elapsed: model.state.elapsed))
+            Text(formatDuration(model.state.elapsed))
                 .font(.system(size: 34, weight: .semibold, design: .rounded))
                 .monospacedDigit()
 
@@ -32,6 +32,13 @@ struct LiveWorkoutView: View {
 
             Spacer()
 
+            if let errorMessage = model.errorMessage {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            }
+
             HStack {
                 Button(model.phase == .paused ? "Resume" : "Pause") {
                     Task {
@@ -49,16 +56,6 @@ struct LiveWorkoutView: View {
 
     private var paceText: String {
         guard let pace = model.state.averagePaceSecPerKm else { return "--:--/km" }
-        return "\(format(elapsed: pace))/km"
-    }
-
-    private func format(elapsed: TimeInterval) -> String {
-        let total = Int(elapsed)
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let seconds = total % 60
-        return hours > 0
-            ? String(format: "%d:%02d:%02d", hours, minutes, seconds)
-            : String(format: "%d:%02d", minutes, seconds)
+        return "\(formatPace(pace))/km"
     }
 }

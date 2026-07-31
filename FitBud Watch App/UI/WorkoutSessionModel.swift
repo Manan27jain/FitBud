@@ -69,19 +69,43 @@ final class WorkoutSessionModel {
     }
 
     func pause() async {
-        try? await recorder.pause()
-        phase = .paused
+        do {
+            try await recorder.pause()
+            phase = .paused
+        } catch {
+            errorMessage = "Couldn't pause: \(error.localizedDescription)"
+        }
     }
 
     func resume() async {
-        try? await recorder.resume()
-        phase = .running
+        do {
+            try await recorder.resume()
+            phase = .running
+        } catch {
+            errorMessage = "Couldn't resume: \(error.localizedDescription)"
+        }
     }
 
     func end() async {
+        // `recorder.end(splits:)` needs the splits array as an argument, and
+        // it only finishes the `metrics` stream (via `continuation.finish()`)
+        // *inside* that call — after the splits have already been handed
+        // over. So we can't call it first and read a post-drain `state.splits`
+        // afterwards; that would be circular. Instead we give `pump()`'s
+        // `for await` loop a chance to run before we snapshot splits: if
+        // HealthKit already delivered a final `LiveMetrics` sample that would
+        // complete the last kilometre split, it is sitting in the stream's
+        // buffer, and `AsyncStream` resumes a suspended `for await` as soon as
+        // a value is available — without an extra suspension per element — so
+        // one `Task.yield()` is enough to let the pump loop drain the current
+        // backlog and update `state.splits` before we cancel it. Cancelling
+        // first (the previous behavior) risked dropping that sample entirely.
+        await Task.yield()
         pumpTask?.cancel()
+
+        let splits = state.splits
         do {
-            let workout = try await recorder.end(splits: state.splits)
+            let workout = try await recorder.end(splits: splits)
             phase = .finished(workout)
         } catch {
             errorMessage = "Couldn't save: \(error.localizedDescription)"
