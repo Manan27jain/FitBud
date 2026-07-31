@@ -23,7 +23,7 @@ consistently, uninjured, and finishes the half marathon running.
 |---|---|
 | 58 days to race day | Stage 1 must be usable within a week. Feature freeze 2026-09-13. |
 | watchOS-only target | No iPhone companion, no WatchConnectivity. The iOS `FitBud` target stays an unused stub. |
-| No iOS simulator runtime installed | Build with `-target "FitBud Watch App" -sdk watchsimulator`, not `-scheme`. |
+| No iOS simulator runtime installed | The auto-generated scheme included the vestigial iOS container target, which broke both `build` and `test`. Resolved by a shared scheme (`xcshareddata/xcschemes/FitBud Watch App.xcscheme`) referencing only the watch targets; standard `-scheme` build and test both work. |
 | Watch radio is unreliable mid-run | **No network call may sit on the critical path of a workout.** |
 | Personal use | API key ships via gitignored `Secrets.xcconfig`. No auth, no multi-tenancy. |
 
