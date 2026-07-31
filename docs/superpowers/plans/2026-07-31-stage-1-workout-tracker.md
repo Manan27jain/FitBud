@@ -987,7 +987,35 @@ This is the **only** task that edits `project.pbxproj`. Without the entitlement,
 </plist>
 ```
 
-- [ ] **Step 2: Add the build settings**
+- [ ] **Step 2: Create the partial Info.plist**
+
+`WKBackgroundModes` is **not** in Xcode's synthesized-key allowlist, so
+`INFOPLIST_KEY_WKBackgroundModes` silently does nothing — the build stays green and the key
+never reaches the generated plist. Supply it via a partial plist merged by `INFOPLIST_FILE`,
+which `GENERATE_INFOPLIST_FILE = YES` merges the synthesized keys into.
+
+It must live **outside** `FitBud Watch App/`: that folder is a synchronized group, so any file
+dropped in it is swept into Copy Bundle Resources and collides with `INFOPLIST_FILE`
+("Multiple commands produce Info.plist"). Put it in a new top-level `Support/`.
+
+`Support/Info.plist`:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>WKBackgroundModes</key>
+	<array>
+		<string>workout-processing</string>
+	</array>
+</dict>
+</plist>
+```
+
+Without this the app is suspended when the wrist lowers mid-run and the live builder stops
+delivering samples — a failure that only appears on a real wrist, during a real run.
+
+- [ ] **Step 3: Add the build settings**
 
 Run this script — it inserts the settings into both build configurations of the `FitBud Watch App` target only:
 
@@ -1000,7 +1028,7 @@ src = open(path).read()
 additions = '''				CODE_SIGN_ENTITLEMENTS = "FitBud Watch App/FitBud Watch App.entitlements";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "FitBud reads your heart rate, workouts and recovery data to coach your training.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "FitBud saves your runs to Apple Health.";
-				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
+				INFOPLIST_FILE = "Support/Info.plist";
 '''
 
 # The watch app target's two config blocks are the only ones carrying WKWatchOnly.
