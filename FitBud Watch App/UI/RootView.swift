@@ -1,7 +1,9 @@
 import SwiftUI
 
 struct RootView: View {
-    @State private var model = WorkoutSessionModel()
+    // Owned by `FitBudApp`, not here: see the comment there for why the
+    // model's lifetime must be the process's rather than the scene's.
+    let model: WorkoutSessionModel
 
     var body: some View {
         NavigationStack {

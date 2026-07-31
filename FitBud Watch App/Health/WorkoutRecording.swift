@@ -39,8 +39,11 @@ protocol WorkoutRecording: AnyObject {
     /// scoped to one workout, so a `start()` that throws cannot leave behind a
     /// finished stream for the next attempt to consume. It yields a snapshot
     /// roughly every second and again whenever HealthKit delivers new sensor
-    /// data, and finishes when the workout ends or the session fails.
-    func start(_ configuration: WorkoutConfiguration) async throws -> AsyncStream<LiveMetrics>
+    /// data. It finishes normally when the workout ends via `end(splits:)`,
+    /// and *throws* when the underlying session fails on its own — that
+    /// distinction is what lets a consumer tell "we ended it" apart from
+    /// "it died while we were still using it".
+    func start(_ configuration: WorkoutConfiguration) async throws -> AsyncThrowingStream<LiveMetrics, Error>
     func pause() async throws
     func resume() async throws
     func end(splits: [Split]) async throws -> CompletedWorkout

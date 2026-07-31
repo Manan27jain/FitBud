@@ -58,15 +58,28 @@ final class WorkoutSessionModel {
         }
     }
 
-    private func pump(_ metrics: AsyncStream<LiveMetrics>) {
+    private func pump(_ metrics: AsyncThrowingStream<LiveMetrics, Error>) {
         // This `Task` inherits `@MainActor` from the enclosing type, so the
         // property accesses below need no `await` and no extra hopping.
         pumpTask = Task { [weak self] in
-            for await sample in metrics {
+            do {
+                for try await sample in metrics {
+                    guard let self else { return }
+                    guard var engine = self.engine else { continue }
+                    let events = engine.ingest(sample)
+                    self.apply(engine: engine, events: events)
+                }
+            } catch {
+                // The stream only throws when the recorder's underlying
+                // session fails on its own (see `HealthKitWorkoutRecorder`'s
+                // `didFailWithError`); a normal `end()` finishes it without
+                // an error. That makes this catch block the model's only
+                // signal that the session died mid-workout, so route to the
+                // same recoverable summary a failed `end()` produces instead
+                // of leaving the live screen frozen on its last values.
                 guard let self else { return }
-                guard var engine = self.engine else { continue }
-                let events = engine.ingest(sample)
-                self.apply(engine: engine, events: events)
+                self.errorMessage = "Workout session failed: \(error.localizedDescription)"
+                self.phase = .finished(self.unsavedWorkout())
             }
         }
     }
@@ -127,6 +140,12 @@ final class WorkoutSessionModel {
         let splits = state.splits
         do {
             let workout = try await recorder.end(splits: splits)
+            // A stale message from an earlier pause/resume failure (or a
+            // session failure the pump loop already recorded) must not
+            // render under a summary that in fact saved successfully —
+            // `SummaryView` treats any non-nil `errorMessage` as "this run
+            // wasn't saved".
+            errorMessage = nil
             phase = .finished(workout)
         } catch {
             // Losing the HealthKit save is bad; being trapped on a frozen live

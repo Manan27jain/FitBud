@@ -10,6 +10,7 @@ import Testing
 final class FakeWorkoutRecorder: WorkoutRecording {
     var startError: Error?
     var endError: Error?
+    var pauseError: Error?
     /// Holds `end()` suspended, so a test can tap End again mid-save.
     var endDelay: Duration?
     private(set) var startCount = 0
@@ -18,9 +19,9 @@ final class FakeWorkoutRecorder: WorkoutRecording {
     /// a second `end()` can never succeed.
     private(set) var isRunning = false
 
-    private var continuation: AsyncStream<LiveMetrics>.Continuation?
+    private var continuation: AsyncThrowingStream<LiveMetrics, Error>.Continuation?
 
-    func start(_ configuration: WorkoutConfiguration) async throws -> AsyncStream<LiveMetrics> {
+    func start(_ configuration: WorkoutConfiguration) async throws -> AsyncThrowingStream<LiveMetrics, Error> {
         startCount += 1
         continuation?.finish()
         continuation = nil
@@ -28,14 +29,16 @@ final class FakeWorkoutRecorder: WorkoutRecording {
             isRunning = false
             throw startError
         }
-        var captured: AsyncStream<LiveMetrics>.Continuation!
-        let stream = AsyncStream<LiveMetrics> { captured = $0 }
+        var captured: AsyncThrowingStream<LiveMetrics, Error>.Continuation!
+        let stream = AsyncThrowingStream<LiveMetrics, Error> { captured = $0 }
         continuation = captured
         isRunning = true
         return stream
     }
 
-    func pause() async throws {}
+    func pause() async throws {
+        if let pauseError { throw pauseError }
+    }
     func resume() async throws {}
 
     func end(splits: [Split]) async throws -> CompletedWorkout {
@@ -59,6 +62,15 @@ final class FakeWorkoutRecorder: WorkoutRecording {
     /// Pushes one sample into the current workout's stream.
     func emit(_ metrics: LiveMetrics) {
         continuation?.yield(metrics)
+    }
+
+    /// Mimics `HKWorkoutSession`'s `didFailWithError`: finishes the stream by
+    /// throwing rather than a plain `finish()`, the distinction
+    /// `WorkoutSessionModel.pump(_:)` relies on to notice a session died on
+    /// its own.
+    func failSession(_ error: Error) {
+        continuation?.finish(throwing: error)
+        continuation = nil
     }
 }
 
@@ -239,5 +251,57 @@ struct WorkoutSessionModelTests {
         recorder.emit(LiveMetrics(elapsed: 241, distanceMeters: 700))
         await waitUntil { haptics.played.contains(.startWalking) }
         #expect(haptics.played.contains(.startWalking))
+    }
+
+    /// A stale message from an earlier failure (here, a failed `pause()`)
+    /// must not survive a *successful* `end()` — `SummaryView` treats any
+    /// non-nil `errorMessage` as "this run wasn't saved", and this run was.
+    @Test func endClearsAStaleErrorMessageOnSuccess() async {
+        let (model, recorder, _) = makeModel()
+        await model.start(.openEasyRun)
+
+        recorder.pauseError = WorkoutRecordingError.notRunning
+        await model.pause()
+        #expect(model.errorMessage != nil)
+
+        recorder.pauseError = nil
+        await model.end()
+
+        #expect(model.errorMessage == nil)
+        guard case .finished = model.phase else {
+            Issue.record("expected a summary, got \(model.phase)")
+            return
+        }
+    }
+
+    /// Regression test for the session dying on its own (`didFailWithError`
+    /// in the real recorder) while the model stayed `.running`. The metric
+    /// stream used to just go quiet, freezing the live screen on its last
+    /// values with no indication anything had gone wrong. `failSession(_:)`
+    /// finishes the fake's stream by throwing, mirroring the real delegate,
+    /// which `pump(_:)` must route to the same recoverable summary a failed
+    /// `end()` produces.
+    @Test func aSessionFailureRoutesToARecoverableSummaryInsteadOfFreezing() async {
+        let (model, recorder, _) = makeModel()
+        await model.start(.openEasyRun)
+        recorder.emit(LiveMetrics(elapsed: 300, distanceMeters: 900, heartRate: 140))
+        await waitUntil { model.state.distanceMeters == 900 }
+
+        recorder.failSession(WorkoutRecordingError.sessionFailed(URLError(.networkConnectionLost)))
+        await waitUntil {
+            if case .finished = model.phase { return true }
+            return false
+        }
+
+        #expect(model.errorMessage != nil)
+        guard case let .finished(workout) = model.phase else {
+            Issue.record("expected a summary, got \(model.phase)")
+            return
+        }
+        // Never handed to `recorder.end(splits:)` — reconstructed from the
+        // live state accumulated before the session failed.
+        #expect(workout.distanceMeters == 900)
+        #expect(workout.duration == 300)
+        #expect(recorder.endCount == 0)
     }
 }

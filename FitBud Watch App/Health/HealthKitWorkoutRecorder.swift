@@ -14,7 +14,7 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
     private var startDate: Date?
-    private var continuation: AsyncStream<LiveMetrics>.Continuation?
+    private var continuation: AsyncThrowingStream<LiveMetrics, Error>.Continuation?
     private var tickTask: Task<Void, Never>?
 
     private var latestDistance: Double = 0
@@ -22,7 +22,7 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
     private var latestHeartRate: Double?
     private var averageHeartRate: Double?
 
-    func start(_ configuration: WorkoutConfiguration) async throws -> AsyncStream<LiveMetrics> {
+    func start(_ configuration: WorkoutConfiguration) async throws -> AsyncThrowingStream<LiveMetrics, Error> {
         // Nothing may survive from a previous attempt: a stream, a ticker or a
         // stale distance total left over from a failed (or completed) workout
         // would corrupt this one.
@@ -42,8 +42,8 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
         hkConfiguration.activityType = .running
         hkConfiguration.locationType = .outdoor
 
-        var capturedContinuation: AsyncStream<LiveMetrics>.Continuation!
-        let stream = AsyncStream<LiveMetrics> { capturedContinuation = $0 }
+        var capturedContinuation: AsyncThrowingStream<LiveMetrics, Error>.Continuation!
+        let stream = AsyncThrowingStream<LiveMetrics, Error> { capturedContinuation = $0 }
         continuation = capturedContinuation
 
         do {
@@ -187,14 +187,22 @@ extension HealthKitWorkoutRecorder: HKWorkoutSessionDelegate {
     ) {}
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
-        // Stop ticking and close the stream, but keep `session`/`builder` so
-        // `end()` can still run its normal path: it will throw, and the model
-        // falls back to a locally-built summary rather than trapping the
-        // athlete on a frozen live screen.
+        // Stop ticking and finish the stream *with* the error, rather than a
+        // plain `finish()`. `WorkoutSessionModel.pump(_:)` is watching for
+        // exactly that distinction: a plain finish means the workout ended
+        // normally through `end(splits:)`, while a thrown finish means the
+        // session died on its own. That is the model's only signal that a
+        // failure happened, and without it the live screen would keep
+        // showing the last values it had, frozen, until the athlete happened
+        // to notice and press End.
+        //
+        // `session`/`builder` are deliberately kept (not torn down here) so
+        // that a concurrent `end()` call still has its normal path to fall
+        // back on rather than hitting `.notRunning`.
         Task { @MainActor in
             self.tickTask?.cancel()
             self.tickTask = nil
-            self.continuation?.finish()
+            self.continuation?.finish(throwing: error)
         }
     }
 }
