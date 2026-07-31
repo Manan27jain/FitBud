@@ -111,3 +111,24 @@ struct WorkoutEngineTests {
         #expect(engine.state.runWalkPhase == nil)
     }
 }
+
+struct WorkoutHapticMappingTests {
+    @Test func splitPlaysTheSplitHaptic() {
+        let split = Split(index: 1, distanceMeters: 1000, elapsed: 540, duration: 540, averageHeartRate: nil)
+        #expect(haptic(for: .splitCompleted(split)) == .splitCompleted)
+    }
+
+    @Test func phaseChangesPlayDistinctHaptics() {
+        #expect(haptic(for: .phaseChanged(.walk)) == .startWalking)
+        #expect(haptic(for: .phaseChanged(.run)) == .startRunning)
+    }
+
+    @Test func finishingPlaysTheCompletionHaptic() {
+        #expect(haptic(for: .finished) == .workoutComplete)
+    }
+
+    @Test func blockChangesAreSilent() {
+        let block = TimelineBlock(kind: .work, duration: 180, zone: "Z4", label: "Threshold")
+        #expect(haptic(for: .blockChanged(index: 1, block: block)) == nil)
+    }
+}
