@@ -8,9 +8,9 @@ struct ZonesPage: View {
     private var state: WorkoutState { model.state }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(formatDuration(state.elapsed))
-                .font(.system(size: 30, weight: .semibold, design: .rounded))
+                .font(.system(size: 26, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(Theme.elapsedYellow)
 
@@ -46,7 +46,7 @@ struct ZonesPage: View {
                 let isActive = zone.id == state.currentZone?.id
                 RoundedRectangle(cornerRadius: 3)
                     .fill(zone.color.opacity(isActive ? 1 : Theme.inactiveZoneOpacity))
-                    .frame(height: 20)
+                    .frame(height: 18)
                     .frame(maxWidth: isActive ? .infinity : 18)
                     .overlay {
                         if isActive {
@@ -62,7 +62,7 @@ struct ZonesPage: View {
     private func metric(value: String, unit: String?, label: String?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 3) {
             Text(value)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 24, weight: .bold, design: .rounded))
                 .monospacedDigit()
             if let unit {
                 Text(unit)
@@ -74,6 +74,7 @@ struct ZonesPage: View {
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .lineSpacing(-2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
