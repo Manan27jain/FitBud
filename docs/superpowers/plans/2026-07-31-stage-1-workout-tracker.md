@@ -14,8 +14,8 @@
 - Test module: `@testable import FitBud_Watch_App` (underscores, not spaces).
 - Test framework is **Swift Testing**, not XCTest. Use `@Test` / `#expect`, never `XCTAssert`.
 - Build/test command (both verified working):
-  `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test`
-- Simulator: Apple Watch SE (44mm, 2nd gen), UUID `BF994011-AC8D-4857-BEFF-F2AD01567CAA`.
+  `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test`
+- Simulator: Apple Watch Series 10 (46mm), UUID `ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5`.
 - The project uses **Xcode 16 synchronized folder groups** (`objectVersion = 77`). New `.swift` files placed in `FitBud Watch App/` or `FitBud Watch AppTests/` are compiled automatically — **never edit `project.pbxproj` to add a source file.** (Build *settings* changes in Task 7 do require a pbxproj edit; that is the only one.)
 - Info.plist is generated (`GENERATE_INFOPLIST_FILE = YES`). Plist keys are set as `INFOPLIST_KEY_*` build settings, not by creating an Info.plist file.
 - Bundle identifier: `mj.FitBud.watchkitapp`. Development team: `2B29LY8MNV`.
@@ -86,7 +86,7 @@ Expected: `0` — the iOS container target UUID must not appear.
 
 - [ ] **Step 2: Run the test suite to confirm a green baseline**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: `** TEST SUCCEEDED **` and the template's `example()` test passing.
 
 - [ ] **Step 3: Commit**
@@ -224,7 +224,7 @@ struct SplitPaceTests {
 
 - [ ] **Step 3: Run the tests**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — 3 tests (template `example()` plus the two above).
 
 - [ ] **Step 4: Commit**
@@ -303,7 +303,7 @@ struct SplitDetectorTests {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
 Expected: FAIL — `cannot find 'SplitDetector' in scope`.
 
 - [ ] **Step 3: Write the implementation**
@@ -364,7 +364,7 @@ struct SplitDetector {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — all 9 tests.
 
 - [ ] **Step 5: Commit**
@@ -438,7 +438,7 @@ struct RunWalkCyclerTests {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
 Expected: FAIL — `cannot find 'RunWalkCycler' in scope`.
 
 - [ ] **Step 3: Write the implementation**
@@ -481,7 +481,7 @@ struct RunWalkCycler: Equatable, Sendable {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — all 16 tests.
 
 - [ ] **Step 5: Commit**
@@ -584,7 +584,7 @@ struct SegmentTimelineTests {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
 Expected: FAIL — `cannot find 'SegmentTimeline' in scope`.
 
 - [ ] **Step 3: Write the implementation**
@@ -674,7 +674,7 @@ struct SegmentTimeline: Equatable, Sendable {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — all 24 tests.
 
 - [ ] **Step 5: Commit**
@@ -820,7 +820,7 @@ struct WorkoutEngineTests {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
 Expected: FAIL — `cannot find 'WorkoutEngine' in scope`.
 
 - [ ] **Step 3: Write WorkoutState**
@@ -947,7 +947,7 @@ Note the phase-change rule: the very first `ingest` sets `lastPhase` without emi
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — all 35 tests.
 
 - [ ] **Step 6: Commit**
@@ -1019,7 +1019,7 @@ PY
 
 Run:
 ```bash
-xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" build 2>&1 | grep -E "error:|\*\* BUILD"
+xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" build 2>&1 | grep -E "error:|\*\* BUILD"
 ```
 Expected: `** BUILD SUCCEEDED **`
 
@@ -1031,7 +1031,7 @@ Expected: both `NSHealthShareUsageDescription` and `NSHealthUpdateUsageDescripti
 
 - [ ] **Step 4: Run the test suite to confirm nothing regressed**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — all 35 tests.
 
 - [ ] **Step 5: Commit**
@@ -1101,7 +1101,7 @@ struct HealthAuthorization {
 
 - [ ] **Step 2: Verify it compiles and tests still pass**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — all 35 tests, no compile errors.
 
 - [ ] **Step 3: Commit**
@@ -1384,7 +1384,7 @@ extension HealthKitWorkoutRecorder: HKLiveWorkoutBuilderDelegate {
 
 - [ ] **Step 4: Verify it compiles and tests still pass**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — all 35 tests, no compile errors.
 
 - [ ] **Step 5: Commit**
@@ -1435,7 +1435,7 @@ struct WorkoutHapticMappingTests {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
 Expected: FAIL — `cannot find 'haptic' in scope`.
 
 - [ ] **Step 3: Write the implementation**
@@ -1486,7 +1486,7 @@ struct WatchHaptics: HapticPlaying {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — all 39 tests.
 
 - [ ] **Step 5: Commit**
@@ -1584,7 +1584,7 @@ struct HealthHistoryProbe {
 
 - [ ] **Step 2: Verify it compiles and tests still pass**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — all 39 tests.
 
 - [ ] **Step 3: Commit**
@@ -1930,18 +1930,18 @@ Then: `rm "FitBud Watch App/ContentView.swift"`
 
 - [ ] **Step 4: Build and run the tests**
 
-Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
 Expected: PASS — all 39 tests.
 
 - [ ] **Step 5: Launch on the simulator and look at it**
 
 ```bash
-xcrun simctl boot BF994011-AC8D-4857-BEFF-F2AD01567CAA 2>/dev/null
-xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=BF994011-AC8D-4857-BEFF-F2AD01567CAA" -derivedDataPath build build
-xcrun simctl install BF994011-AC8D-4857-BEFF-F2AD01567CAA "build/Build/Products/Debug-watchsimulator/FitBud Watch App.app"
-xcrun simctl launch BF994011-AC8D-4857-BEFF-F2AD01567CAA mj.FitBud.watchkitapp
+xcrun simctl boot ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5 2>/dev/null
+xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" -derivedDataPath build build
+xcrun simctl install ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5 "build/Build/Products/Debug-watchsimulator/FitBud Watch App.app"
+xcrun simctl launch ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5 mj.FitBud.watchkitapp
 sleep 3
-xcrun simctl io BF994011-AC8D-4857-BEFF-F2AD01567CAA screenshot /tmp/fitbud-start.png
+xcrun simctl io ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5 screenshot /tmp/fitbud-start.png
 ```
 
 **Read the screenshot.** Expected: a list showing "Easy run", "Long run 4:1", "Long run 5:1", "Health history probe". A blank screen means the app failed to launch — check the launch output before continuing.
