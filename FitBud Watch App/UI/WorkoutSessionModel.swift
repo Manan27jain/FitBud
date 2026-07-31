@@ -17,7 +17,7 @@ final class WorkoutSessionModel {
     private(set) var state = WorkoutState()
     private(set) var errorMessage: String?
 
-    private let recorder: WorkoutRecording
+    private var recorder: WorkoutRecording
     private let haptics: HapticPlaying
     private var engine: WorkoutEngine?
     private var pumpTask: Task<Void, Never>?
@@ -57,6 +57,15 @@ final class WorkoutSessionModel {
             errorMessage = "Couldn't start: \(error.localizedDescription)"
         }
     }
+
+#if DEBUG
+    /// Starts a scripted workout against `DemoWorkoutRecorder` so the UI can be
+    /// seen on a simulator, which has no heart-rate sensor. Debug builds only.
+    func startDemo() async {
+        recorder = DemoWorkoutRecorder()
+        await start(.longRun5to1)
+    }
+#endif
 
     private func pump(_ metrics: AsyncThrowingStream<LiveMetrics, Error>) {
         // This `Task` inherits `@MainActor` from the enclosing type, so the

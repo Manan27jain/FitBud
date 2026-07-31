@@ -52,3 +52,18 @@ struct HRZoneTests {
         #expect(HRZone.zone(for: 60) == nil)
     }
 }
+
+#if DEBUG
+struct DemoHeartRateScriptTests {
+    @Test func theScriptedSweepVisitsEveryZone() {
+        // If the demo never reaches Z5 the ring's red state can never be looked
+        // at, and this task would not achieve what it exists for.
+        var visited = Set<String>()
+        for second in stride(from: 0.0, through: 1_200.0, by: 5.0) {
+            let bpm = DemoWorkoutRecorder.scriptedHeartRate(at: second)
+            if let zone = HRZone.zone(for: bpm) { visited.insert(zone.id) }
+        }
+        #expect(visited == ["Z1", "Z2", "Z3", "Z4", "Z5"])
+    }
+}
+#endif

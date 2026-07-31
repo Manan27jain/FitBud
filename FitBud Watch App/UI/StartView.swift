@@ -26,6 +26,13 @@ struct StartView: View {
             NavigationLink("Health history probe") {
                 HistoryProbeView()
             }
+#if DEBUG
+            Button("Demo run (scripted HR)") {
+                Task { await model.startDemo() }
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+#endif
         }
         .navigationTitle("FitBud")
         .task {
