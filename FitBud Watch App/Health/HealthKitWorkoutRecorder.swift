@@ -16,8 +16,7 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
     private var latestDistance: Double = 0
     private var latestEnergy: Double = 0
     private var latestHeartRate: Double?
-    private var heartRateSum: Double = 0
-    private var heartRateCount: Int = 0
+    private var averageHeartRate: Double?
 
     let metrics: AsyncStream<LiveMetrics>
 
@@ -30,6 +29,7 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
 
     func start(_ configuration: WorkoutConfiguration) async throws {
         guard HKHealthStore.isHealthDataAvailable() else {
+            continuation?.finish()
             throw WorkoutRecordingError.healthDataUnavailable
         }
 
@@ -56,6 +56,7 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
             self.startDate = start
             emit()
         } catch {
+            continuation?.finish()
             throw WorkoutRecordingError.sessionFailed(error)
         }
     }
@@ -89,7 +90,7 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
             end: end,
             distanceMeters: latestDistance,
             activeEnergyKcal: latestEnergy,
-            averageHeartRate: heartRateCount > 0 ? heartRateSum / Double(heartRateCount) : nil,
+            averageHeartRate: averageHeartRate,
             splits: splits
         )
     }
@@ -141,8 +142,9 @@ extension HealthKitWorkoutRecorder: HKLiveWorkoutBuilderDelegate {
                     let unit = HKUnit.count().unitDivided(by: .minute())
                     if let value = statistics.mostRecentQuantity()?.doubleValue(for: unit) {
                         self.latestHeartRate = value
-                        self.heartRateSum += value
-                        self.heartRateCount += 1
+                    }
+                    if let average = statistics.averageQuantity()?.doubleValue(for: unit) {
+                        self.averageHeartRate = average
                     }
                 case HKQuantityType(.distanceWalkingRunning):
                     if let value = statistics.sumQuantity()?.doubleValue(for: .meter()) {
