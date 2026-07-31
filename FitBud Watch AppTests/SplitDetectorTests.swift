@@ -8,13 +8,13 @@ struct SplitPaceTests {
             distanceMeters: 1000,
             elapsed: 540,
             duration: 540,
-            averageHeartRate: 155
+            heartRateAtSplit: 155
         )
         #expect(split.paceSecPerKm == 540)
     }
 
     @Test func paceIsZeroForZeroDistance() {
-        let split = Split(index: 1, distanceMeters: 0, elapsed: 10, duration: 10, averageHeartRate: nil)
+        let split = Split(index: 1, distanceMeters: 0, elapsed: 10, duration: 10, heartRateAtSplit: nil)
         #expect(split.paceSecPerKm == 0)
     }
 }
@@ -63,6 +63,6 @@ struct SplitDetectorTests {
     @Test func heartRateIsCarriedOntoTheSplit() {
         var detector = SplitDetector(intervalMeters: 1000)
         let splits = detector.update(distanceMeters: 1000, elapsed: 540, heartRate: 162)
-        #expect(splits[0].averageHeartRate == 162)
+        #expect(splits[0].heartRateAtSplit == 162)
     }
 }

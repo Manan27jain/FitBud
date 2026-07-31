@@ -7,35 +7,44 @@ import HealthKit
 /// down, so it must be started even for an unstructured run.
 @MainActor
 final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
+    /// How often a snapshot is emitted independently of HealthKit deliveries.
+    private static let tickInterval: Duration = .seconds(1)
+
     private let store = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
     private var startDate: Date?
     private var continuation: AsyncStream<LiveMetrics>.Continuation?
+    private var tickTask: Task<Void, Never>?
 
     private var latestDistance: Double = 0
     private var latestEnergy: Double = 0
     private var latestHeartRate: Double?
     private var averageHeartRate: Double?
 
-    let metrics: AsyncStream<LiveMetrics>
+    func start(_ configuration: WorkoutConfiguration) async throws -> AsyncStream<LiveMetrics> {
+        // Nothing may survive from a previous attempt: a stream, a ticker or a
+        // stale distance total left over from a failed (or completed) workout
+        // would corrupt this one.
+        teardown()
 
-    override init() {
-        var capturedContinuation: AsyncStream<LiveMetrics>.Continuation!
-        metrics = AsyncStream { capturedContinuation = $0 }
-        super.init()
-        continuation = capturedContinuation
-    }
-
-    func start(_ configuration: WorkoutConfiguration) async throws {
         guard HKHealthStore.isHealthDataAvailable() else {
-            continuation?.finish()
             throw WorkoutRecordingError.healthDataUnavailable
+        }
+        // `requestAuthorization` succeeds even when the athlete denies write
+        // access, and `HKLiveWorkoutBuilder` only reports that at
+        // `finishWorkout()` — two hours too late. Refuse up front instead.
+        guard store.authorizationStatus(for: HKObjectType.workoutType()) == .sharingAuthorized else {
+            throw WorkoutRecordingError.workoutSavingNotAuthorized
         }
 
         let hkConfiguration = HKWorkoutConfiguration()
         hkConfiguration.activityType = .running
         hkConfiguration.locationType = .outdoor
+
+        var capturedContinuation: AsyncStream<LiveMetrics>.Continuation!
+        let stream = AsyncStream<LiveMetrics> { capturedContinuation = $0 }
+        continuation = capturedContinuation
 
         do {
             let session = try HKWorkoutSession(healthStore: store, configuration: hkConfiguration)
@@ -54,9 +63,14 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
             self.session = session
             self.builder = builder
             self.startDate = start
+            startTicking()
             emit()
+            return stream
         } catch {
-            continuation?.finish()
+            // This stream never reached a consumer, so finishing it costs
+            // nothing — and `teardown()` on the next attempt would finish it
+            // anyway. Clearing it here keeps the failed object inert.
+            teardown()
             throw WorkoutRecordingError.sessionFailed(error)
         }
     }
@@ -76,23 +90,46 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
             throw WorkoutRecordingError.notRunning
         }
 
+        // Whatever HealthKit does next, this recorder must not be left
+        // half-ended: a second `end()` on an already-ended session throws
+        // forever, which would trap the athlete on the live screen.
+        defer { teardown() }
+
+        // `elapsedTime` is unreadable once collection has ended, so capture it
+        // now as the fallback for a workout HealthKit declines to hand back.
+        let elapsedBeforeEnding = builder.elapsedTime
         let end = Date()
         session.end()
         try await builder.endCollection(at: end)
-        _ = try await builder.finishWorkout()
-        continuation?.finish()
+        let workout = try await builder.finishWorkout()
 
-        self.session = nil
-        self.builder = nil
-
+        // Prefer the saved workout's own totals. Its `duration` already
+        // excludes paused time, which is what `elapsedTime` (and therefore
+        // every split) measures — wall-clock `end - start` does not, so after
+        // one traffic-light pause the summary would contradict the splits
+        // printed directly above it.
         return CompletedWorkout(
-            start: startDate,
-            end: end,
-            distanceMeters: latestDistance,
-            activeEnergyKcal: latestEnergy,
+            start: workout?.startDate ?? startDate,
+            end: workout?.endDate ?? end,
+            duration: workout?.duration ?? elapsedBeforeEnding,
+            distanceMeters: total(of: .distanceWalkingRunning, in: workout, unit: .meter())
+                ?? latestDistance,
+            activeEnergyKcal: total(of: .activeEnergyBurned, in: workout, unit: .kilocalorie())
+                ?? latestEnergy,
             averageHeartRate: averageHeartRate,
             splits: splits
         )
+    }
+
+    private func total(
+        of identifier: HKQuantityTypeIdentifier,
+        in workout: HKWorkout?,
+        unit: HKUnit
+    ) -> Double? {
+        workout?
+            .statistics(for: HKQuantityType(identifier))?
+            .sumQuantity()?
+            .doubleValue(for: unit)
     }
 
     /// `HKLiveWorkoutBuilder.elapsedTime` already excludes time spent paused,
@@ -110,6 +147,35 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
             )
         )
     }
+
+    /// Sample-driven emits alone are not enough: heart rate takes 5-15s to
+    /// arrive and GPS lock up to 30s, so the clock would sit at 0:00 for the
+    /// opening seconds of every run, and each run/walk or block transition
+    /// would be announced only as late as the next sample.
+    private func startTicking() {
+        tickTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.tickInterval)
+                guard !Task.isCancelled, let self, self.builder != nil else { return }
+                self.emit()
+            }
+        }
+    }
+
+    /// Returns the recorder to its pre-workout state. Safe to call repeatedly.
+    private func teardown() {
+        tickTask?.cancel()
+        tickTask = nil
+        continuation?.finish()
+        continuation = nil
+        session = nil
+        builder = nil
+        startDate = nil
+        latestDistance = 0
+        latestEnergy = 0
+        latestHeartRate = nil
+        averageHeartRate = nil
+    }
 }
 
 extension HealthKitWorkoutRecorder: HKWorkoutSessionDelegate {
@@ -121,7 +187,15 @@ extension HealthKitWorkoutRecorder: HKWorkoutSessionDelegate {
     ) {}
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
-        Task { @MainActor in self.continuation?.finish() }
+        // Stop ticking and close the stream, but keep `session`/`builder` so
+        // `end()` can still run its normal path: it will throw, and the model
+        // falls back to a locally-built summary rather than trapping the
+        // athlete on a frozen live screen.
+        Task { @MainActor in
+            self.tickTask?.cancel()
+            self.tickTask = nil
+            self.continuation?.finish()
+        }
     }
 }
 

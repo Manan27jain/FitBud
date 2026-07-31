@@ -114,7 +114,7 @@ struct WorkoutEngineTests {
 
 struct WorkoutHapticMappingTests {
     @Test func splitPlaysTheSplitHaptic() {
-        let split = Split(index: 1, distanceMeters: 1000, elapsed: 540, duration: 540, averageHeartRate: nil)
+        let split = Split(index: 1, distanceMeters: 1000, elapsed: 540, duration: 540, heartRateAtSplit: nil)
         #expect(haptic(for: .splitCompleted(split)) == .splitCompleted)
     }
 
@@ -127,8 +127,24 @@ struct WorkoutHapticMappingTests {
         #expect(haptic(for: .finished) == .workoutComplete)
     }
 
-    @Test func blockChangesAreSilent() {
+    /// Block changes are how the athlete knows an interval started or ended
+    /// without looking at the watch, so they must buzz — and must not be
+    /// confusable with a split or a run/walk transition.
+    @Test func blockChangesPlayTheirOwnHaptic() {
         let block = TimelineBlock(kind: .work, duration: 180, zone: "Z4", label: "Threshold")
-        #expect(haptic(for: .blockChanged(index: 1, block: block)) == nil)
+        #expect(haptic(for: .blockChanged(index: 1, block: block)) == .blockChanged)
+    }
+
+    @Test func everyEventHapticIsDistinct() {
+        let split = Split(index: 1, distanceMeters: 1000, elapsed: 540, duration: 540, heartRateAtSplit: nil)
+        let block = TimelineBlock(kind: .work, duration: 180, zone: "Z4", label: "Threshold")
+        let haptics: [WorkoutHaptic] = [
+            haptic(for: .splitCompleted(split)),
+            haptic(for: .phaseChanged(.run)),
+            haptic(for: .phaseChanged(.walk)),
+            haptic(for: .blockChanged(index: 1, block: block)),
+            haptic(for: .finished)
+        ]
+        #expect(Set(haptics).count == haptics.count)
     }
 }

@@ -39,7 +39,7 @@ struct SplitDetector {
                 distanceMeters: intervalMeters,
                 elapsed: splitElapsed,
                 duration: splitElapsed - lastSplitElapsed,
-                averageHeartRate: heartRate
+                heartRateAtSplit: heartRate
             )
             splits.append(split)
             emitted.append(split)

@@ -9,7 +9,10 @@ struct Split: Equatable, Sendable {
     let elapsed: TimeInterval
     /// Time taken for this split alone.
     let duration: TimeInterval
-    let averageHeartRate: Double?
+    /// The heart rate sampled *at* the kilometre boundary, not a mean across the
+    /// kilometre. Averaging would need per-split accumulation the engine does
+    /// not do yet; Stage 2 can add it if a true mean turns out to be wanted.
+    let heartRateAtSplit: Double?
 
     /// Pace for this split in seconds per kilometre.
     var paceSecPerKm: Double {

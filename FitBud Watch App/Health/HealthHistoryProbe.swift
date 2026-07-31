@@ -13,6 +13,25 @@ struct HealthHistoryProbe {
         let oldestSample: Date?
         let newestSample: Date?
         let sampleCount: Int
+        /// Non-nil when the query itself failed — almost always denied read
+        /// access. Without this, "the watch keeps no history" and "we were never
+        /// allowed to look" are indistinguishable, and this probe exists
+        /// precisely to choose Stage 4's baseline strategy between them.
+        let failure: String?
+
+        init(
+            metric: String,
+            oldestSample: Date?,
+            newestSample: Date?,
+            sampleCount: Int,
+            failure: String? = nil
+        ) {
+            self.metric = metric
+            self.oldestSample = oldestSample
+            self.newestSample = newestSample
+            self.sampleCount = sampleCount
+            self.failure = failure
+        }
 
         var spanDays: Int? {
             guard let oldestSample, let newestSample else { return nil }
@@ -41,25 +60,26 @@ struct HealthHistoryProbe {
     }
 
     private func probe(name: String, type: HKSampleType) async -> ProbeResult {
-        let samples = await fetchAll(type: type)
+        let (samples, error) = await fetchAll(type: type)
         let dates = samples.map(\.startDate).sorted()
         return ProbeResult(
             metric: name,
             oldestSample: dates.first,
             newestSample: dates.last,
-            sampleCount: samples.count
+            sampleCount: samples.count,
+            failure: error?.localizedDescription
         )
     }
 
-    private func fetchAll(type: HKSampleType) async -> [HKSample] {
+    private func fetchAll(type: HKSampleType) async -> (samples: [HKSample], error: Error?) {
         await withCheckedContinuation { continuation in
             let query = HKSampleQuery(
                 sampleType: type,
                 predicate: nil,
                 limit: HKObjectQueryNoLimit,
                 sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
-            ) { _, samples, _ in
-                continuation.resume(returning: samples ?? [])
+            ) { _, samples, error in
+                continuation.resume(returning: (samples ?? [], error))
             }
             store.execute(query)
         }

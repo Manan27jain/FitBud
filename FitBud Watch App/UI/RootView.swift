@@ -11,7 +11,11 @@ struct RootView: View {
             case .running, .paused:
                 LiveWorkoutView(model: model)
             case let .finished(workout):
-                SummaryView(workout: workout)
+                SummaryView(
+                    workout: workout,
+                    errorMessage: model.errorMessage,
+                    onDone: { model.reset() }
+                )
             }
         }
     }

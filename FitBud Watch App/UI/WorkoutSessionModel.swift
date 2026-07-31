@@ -21,6 +21,7 @@ final class WorkoutSessionModel {
     private let haptics: HapticPlaying
     private var engine: WorkoutEngine?
     private var pumpTask: Task<Void, Never>?
+    private var isEnding = false
 
     // `recorder` can't default directly to `HealthKitWorkoutRecorder()`: default
     // argument expressions are type-checked outside the initializer's own
@@ -34,27 +35,37 @@ final class WorkoutSessionModel {
     }
 
     func start(_ configuration: WorkoutConfiguration) async {
+        // A previous attempt's error text and metrics must not bleed into this
+        // workout: otherwise a failed start leaves "Couldn't start: …" on screen
+        // for the whole of the successful run that follows it.
+        pumpTask?.cancel()
+        pumpTask = nil
+        errorMessage = nil
+        state = WorkoutState()
         engine = WorkoutEngine(
             timeline: SegmentTimeline(segments: configuration.segments),
             runWalk: configuration.runWalk
         )
         do {
-            try await recorder.start(configuration)
+            // The stream belongs to this workout, so a failed start can never
+            // hand a finished stream to the next one.
+            let metrics = try await recorder.start(configuration)
             phase = .running
-            pump()
+            pump(metrics)
         } catch {
+            engine = nil
             errorMessage = "Couldn't start: \(error.localizedDescription)"
         }
     }
 
-    private func pump() {
+    private func pump(_ metrics: AsyncStream<LiveMetrics>) {
         // This `Task` inherits `@MainActor` from the enclosing type, so the
         // property accesses below need no `await` and no extra hopping.
         pumpTask = Task { [weak self] in
-            guard let self else { return }
-            for await metrics in self.recorder.metrics {
+            for await sample in metrics {
+                guard let self else { return }
                 guard var engine = self.engine else { continue }
-                let events = engine.ingest(metrics)
+                let events = engine.ingest(sample)
                 self.apply(engine: engine, events: events)
             }
         }
@@ -64,7 +75,7 @@ final class WorkoutSessionModel {
         self.engine = engine
         state = engine.state
         for event in events {
-            if let haptic = haptic(for: event) { haptics.play(haptic) }
+            haptics.play(haptic(for: event))
         }
     }
 
@@ -87,6 +98,15 @@ final class WorkoutSessionModel {
     }
 
     func end() async {
+        // `end()` suspends for as long as HealthKit takes to save, and the End
+        // button stays tappable throughout. A second tap — trivially easy with
+        // cold hands — used to re-enter here, call `session.end()` on a session
+        // the first call had already ended, and replace a perfectly good saved
+        // summary with "Couldn't save to Health". Observed on the simulator.
+        guard !isEnding else { return }
+        isEnding = true
+        defer { isEnding = false }
+
         // `recorder.end(splits:)` needs the splits array as an argument, and
         // it only finishes the `metrics` stream (via `continuation.finish()`)
         // *inside* that call — after the splits have already been handed
@@ -102,13 +122,49 @@ final class WorkoutSessionModel {
         // first (the previous behavior) risked dropping that sample entirely.
         await Task.yield()
         pumpTask?.cancel()
+        pumpTask = nil
 
         let splits = state.splits
         do {
             let workout = try await recorder.end(splits: splits)
             phase = .finished(workout)
         } catch {
-            errorMessage = "Couldn't save: \(error.localizedDescription)"
+            // Losing the HealthKit save is bad; being trapped on a frozen live
+            // screen after a two-hour run is worse. The recorder has already
+            // torn its session down, so retrying cannot succeed — go to the
+            // summary anyway, built from the state we accumulated live, and say
+            // plainly that it wasn't saved. The athlete can read their run and
+            // leave.
+            errorMessage = "Couldn't save to Health: \(error.localizedDescription)"
+            phase = .finished(unsavedWorkout())
         }
+    }
+
+    /// Reconstructs a summary from live state when HealthKit refuses to hand one
+    /// back. `state.elapsed` excludes paused time, matching a real
+    /// `CompletedWorkout.duration`; the heart rate is the last sample seen
+    /// rather than a true average, which is the best available here.
+    private func unsavedWorkout() -> CompletedWorkout {
+        let end = Date()
+        return CompletedWorkout(
+            start: end.addingTimeInterval(-state.elapsed),
+            end: end,
+            duration: state.elapsed,
+            distanceMeters: state.distanceMeters,
+            activeEnergyKcal: state.activeEnergyKcal,
+            averageHeartRate: state.heartRate,
+            splits: state.splits
+        )
+    }
+
+    /// Returns to the start screen so a second workout can be recorded without
+    /// force-quitting the app.
+    func reset() {
+        pumpTask?.cancel()
+        pumpTask = nil
+        engine = nil
+        state = WorkoutState()
+        errorMessage = nil
+        phase = .idle
     }
 }

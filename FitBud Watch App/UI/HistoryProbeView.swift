@@ -12,8 +12,16 @@ struct HistoryProbeView: View {
             ForEach(results) { result in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(result.metric).font(.footnote).bold()
-                    Text("\(result.sampleCount) samples")
-                        .font(.caption2).foregroundStyle(.secondary)
+                    if let failure = result.failure {
+                        // "Query failed" is a different architectural answer
+                        // from "no history exists" — never show them the same.
+                        Text("query failed — check read access")
+                            .font(.caption2).foregroundStyle(.red)
+                        Text(failure).font(.caption2).foregroundStyle(.red)
+                    } else {
+                        Text("\(result.sampleCount) samples")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
                     if let oldest = result.oldestSample {
                         Text("from \(oldest.formatted(date: .abbreviated, time: .omitted))")
                             .font(.caption2).foregroundStyle(.secondary)
