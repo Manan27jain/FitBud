@@ -1,0 +1,1146 @@
+{
+  "schemaVersion": 1,
+  "planId": "half-2026-09-27",
+  "generatedOn": "2026-07-31",
+  "goal": {
+    "event": "Half Marathon",
+    "date": "2026-09-27",
+    "distanceKm": 21.0975,
+    "objective": "finish_strong",
+    "timeTarget": null,
+    "strategy": "run_walk_5_1",
+    "predictedFinish": "2:25-2:45 with disciplined run/walk"
+  },
+  "athlete": {
+    "dob": "2000-12-27",
+    "age": 25,
+    "sex": "male",
+    "weightKg": 70,
+    "hrMax": 207,
+    "hrRest": 60,
+    "vo2max": 36.1,
+    "baselineLongestRunKm": 8.01,
+    "baselineWeeklyKm": 11,
+    "baselineNote": "Runs historically at 85-92% HRmax; sleep median 5.5h/night"
+  },
+  "zones": [
+    {
+      "id": "Z1",
+      "name": "Recovery",
+      "bpm": [
+        134,
+        148
+      ],
+      "pace": "10:30-11:30/km",
+      "purpose": "Walk breaks, warmups, cooldowns. Conversational, nose-breathing."
+    },
+    {
+      "id": "Z2",
+      "name": "Easy / Aerobic",
+      "bpm": [
+        148,
+        163
+      ],
+      "pace": "9:00-10:00/km",
+      "purpose": "THE money zone. 80% of your running lives here. Full sentences out loud."
+    },
+    {
+      "id": "Z3",
+      "name": "Steady",
+      "bpm": [
+        163,
+        178
+      ],
+      "pace": "8:00-8:45/km",
+      "purpose": "Tempo work. Broken sentences. Comfortably hard."
+    },
+    {
+      "id": "Z4",
+      "name": "Threshold",
+      "bpm": [
+        178,
+        192
+      ],
+      "pace": "7:00-7:45/km",
+      "purpose": "Intervals only. A few words at a time. Where you currently run everything."
+    },
+    {
+      "id": "Z5",
+      "name": "VO2max",
+      "bpm": [
+        192,
+        207
+      ],
+      "pace": "<7:00/km",
+      "purpose": "Strides only. Not used for sustained work in this block."
+    }
+  ],
+  "rules": {
+    "sleepGate": {
+      "minHours": 7.0,
+      "beforeLongRun": 7.0,
+      "action": "If <6h, drop the day's quality session to easy Z2. If <5h, make it a rest day."
+    },
+    "recoveryGate": {
+      "restingHrTrigger": "+7 bpm over trailing 30-day average for 2 consecutive days",
+      "hrvTrigger": "-25% below trailing 30-day average for 2 consecutive days",
+      "action": "Downgrade next session to Z1 recovery or rest. Do not 'push through'."
+    },
+    "progressionCaps": {
+      "weeklyKmIncreaseMax": 0.2,
+      "longRunIncreaseMaxKm": 2.0,
+      "comparisonBasis": "Compare against the last NON-cutback week, not the week immediately prior. Week 5 following the week 4 cutback is +13% over week 3, not +53% over week 4.",
+      "note": "The classic 10%/week rule cannot hold on a 58-day build from an 11km base \u2014 honouring it would cap the peak near 21km/week, too thin to support 21.1km. This block runs to 20% and accepts that as a flagged, deliberate risk, mitigated by (a) every added kilometre being Z2 rather than Z4, (b) the week 4 cutback, and (c) the recovery gate above, which can override any planned progression."
+    },
+    "immutable": [
+      "Week 4 cutback cannot be removed or upgraded",
+      "Weeks 7-8 cannot be increased in volume or intensity",
+      "Long run never exceeds 16km before race day",
+      "Quality sessions never exceed 2 per week"
+    ],
+    "zoneDiscipline": "80% of weekly running minutes must be Z1-Z2. This is the single most important rule in the plan."
+  },
+  "weeks": [
+    {
+      "index": 0,
+      "start": "2026-08-01",
+      "end": "2026-08-02",
+      "focus": "Calibration \u2014 find out what Zone 2 actually feels like",
+      "targetKm": 4,
+      "days": [
+        {
+          "date": "2026-08-01",
+          "dow": "Sat",
+          "type": "rest",
+          "title": "Rest + 15min mobility",
+          "targetKm": 0,
+          "targetMin": 15,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": "Hips, calves, ankles. Block starts Monday."
+        },
+        {
+          "date": "2026-08-02",
+          "dow": "Sun",
+          "type": "easy",
+          "title": "Zone 2 calibration run",
+          "targetKm": 4,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "The whole point: run 4min / walk 1min and keep HR under 162 the entire time. Expect ~9:30-10:30/km. It will feel too easy. Do it anyway \u2014 this is your new normal."
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "start": "2026-08-03",
+      "end": "2026-08-09",
+      "focus": "Reset the effort. Learn to run slow.",
+      "targetKm": 16,
+      "days": [
+        {
+          "date": "2026-08-03",
+          "dow": "Mon",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": "Full rest. Sleep target 7h+ starts tonight."
+        },
+        {
+          "date": "2026-08-04",
+          "dow": "Tue",
+          "type": "easy",
+          "title": "Easy run",
+          "targetKm": 4,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Cap HR at 163. Walk whenever it climbs above \u2014 that is the workout, not a failure."
+        },
+        {
+          "date": "2026-08-05",
+          "dow": "Wed",
+          "type": "strength",
+          "title": "Strength \u2014 legs & core",
+          "targetKm": 0,
+          "targetMin": 40,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": "Squats, lunges, calf raises, planks. Keep it well short of failure."
+        },
+        {
+          "date": "2026-08-06",
+          "dow": "Thu",
+          "type": "easy",
+          "title": "Easy run + strides",
+          "targetKm": 4,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [
+            {
+              "kind": "warmup",
+              "min": 5,
+              "zone": "Z1",
+              "label": "Easy jog/walk warmup"
+            },
+            {
+              "kind": "repeat",
+              "times": 4,
+              "work": {
+                "min": 0.33,
+                "zone": "Z5",
+                "label": "20s stride, relaxed and fast"
+              },
+              "recover": {
+                "min": 1.5,
+                "zone": "Z1",
+                "label": "Walk it off"
+              }
+            }
+          ],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Strides are 20s of smooth speed, not a sprint. Full recovery between."
+        },
+        {
+          "date": "2026-08-07",
+          "dow": "Fri",
+          "type": "rest",
+          "title": "Rest or 30min walk",
+          "targetKm": 0,
+          "targetMin": 30,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-08",
+          "dow": "Sat",
+          "type": "cross",
+          "title": "Cross-train 30min",
+          "targetKm": 0,
+          "targetMin": 30,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": null,
+          "notes": "Bike, swim, or brisk walk. Zero running."
+        },
+        {
+          "date": "2026-08-09",
+          "dow": "Sun",
+          "type": "long",
+          "title": "Long run/walk",
+          "targetKm": 8,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Matches your current longest ever \u2014 but this time at easy effort, not 186bpm. Slow is the assignment."
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "start": "2026-08-10",
+      "end": "2026-08-16",
+      "focus": "Extend the long run. Still all aerobic.",
+      "targetKm": 19,
+      "days": [
+        {
+          "date": "2026-08-10",
+          "dow": "Mon",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-11",
+          "dow": "Tue",
+          "type": "easy",
+          "title": "Easy run",
+          "targetKm": 4,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Cap HR at 163. Walk whenever it climbs above \u2014 that is the workout, not a failure."
+        },
+        {
+          "date": "2026-08-12",
+          "dow": "Wed",
+          "type": "strength",
+          "title": "Strength \u2014 legs & core",
+          "targetKm": 0,
+          "targetMin": 40,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-13",
+          "dow": "Thu",
+          "type": "easy",
+          "title": "Easy run + strides",
+          "targetKm": 5,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [
+            {
+              "kind": "warmup",
+              "min": 5,
+              "zone": "Z1",
+              "label": "Easy jog/walk warmup"
+            },
+            {
+              "kind": "repeat",
+              "times": 6,
+              "work": {
+                "min": 0.33,
+                "zone": "Z5",
+                "label": "20s stride"
+              },
+              "recover": {
+                "min": 1.5,
+                "zone": "Z1",
+                "label": "Walk it off"
+              }
+            }
+          ],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": ""
+        },
+        {
+          "date": "2026-08-14",
+          "dow": "Fri",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-15",
+          "dow": "Sat",
+          "type": "cross",
+          "title": "Cross-train 35min",
+          "targetKm": 0,
+          "targetMin": 35,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-16",
+          "dow": "Sun",
+          "type": "long",
+          "title": "Long run/walk",
+          "targetKm": 10,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "New distance PR. Take the walk breaks from minute one \u2014 do not earn them, schedule them."
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "start": "2026-08-17",
+      "end": "2026-08-23",
+      "focus": "First quality session. Long run to 12km.",
+      "targetKm": 22,
+      "days": [
+        {
+          "date": "2026-08-17",
+          "dow": "Mon",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-18",
+          "dow": "Tue",
+          "type": "easy",
+          "title": "Easy run",
+          "targetKm": 4,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Cap HR at 163. Walk whenever it climbs above \u2014 that is the workout, not a failure."
+        },
+        {
+          "date": "2026-08-19",
+          "dow": "Wed",
+          "type": "strength",
+          "title": "Strength \u2014 legs & core",
+          "targetKm": 0,
+          "targetMin": 40,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-20",
+          "dow": "Thu",
+          "type": "tempo",
+          "title": "Tempo intervals",
+          "targetKm": 6,
+          "targetMin": 0,
+          "zone": "Z3",
+          "segments": [
+            {
+              "kind": "warmup",
+              "min": 10,
+              "zone": "Z1",
+              "label": "Easy jog/walk warmup"
+            },
+            {
+              "kind": "repeat",
+              "times": 3,
+              "work": {
+                "min": 5,
+                "zone": "Z3",
+                "label": "5min steady (162-177)"
+              },
+              "recover": {
+                "min": 2,
+                "zone": "Z1",
+                "label": "2min walk"
+              }
+            },
+            {
+              "kind": "cooldown",
+              "min": 10,
+              "zone": "Z1",
+              "label": "Easy jog to cool down"
+            }
+          ],
+          "runWalk": null,
+          "notes": "First real quality of the block. Z3 is 'comfortably hard' \u2014 you should be able to say a short sentence."
+        },
+        {
+          "date": "2026-08-21",
+          "dow": "Fri",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-22",
+          "dow": "Sat",
+          "type": "rest",
+          "title": "Rest or 30min walk",
+          "targetKm": 0,
+          "targetMin": 30,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": "Quality day Thursday plus 12km Sunday is enough load this week."
+        },
+        {
+          "date": "2026-08-23",
+          "dow": "Sun",
+          "type": "long",
+          "title": "Long run/walk",
+          "targetKm": 12,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Practise fuelling: take water and something with sugar at 45min. Test it now, not on race day."
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "start": "2026-08-24",
+      "end": "2026-08-30",
+      "focus": "CUTBACK WEEK \u2014 absorb the work. Do not skip this.",
+      "targetKm": 17,
+      "days": [
+        {
+          "date": "2026-08-24",
+          "dow": "Mon",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-25",
+          "dow": "Tue",
+          "type": "easy",
+          "title": "Easy run",
+          "targetKm": 4,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Cap HR at 163. Walk whenever it climbs above \u2014 that is the workout, not a failure."
+        },
+        {
+          "date": "2026-08-26",
+          "dow": "Wed",
+          "type": "strength",
+          "title": "Strength \u2014 light",
+          "targetKm": 0,
+          "targetMin": 30,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": "Half your usual load. This is a recovery week."
+        },
+        {
+          "date": "2026-08-27",
+          "dow": "Thu",
+          "type": "easy",
+          "title": "Easy run + strides",
+          "targetKm": 4,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [
+            {
+              "kind": "warmup",
+              "min": 5,
+              "zone": "Z1",
+              "label": "Easy jog/walk warmup"
+            },
+            {
+              "kind": "repeat",
+              "times": 4,
+              "work": {
+                "min": 0.33,
+                "zone": "Z5",
+                "label": "20s stride"
+              },
+              "recover": {
+                "min": 1.5,
+                "zone": "Z1",
+                "label": "Walk it off"
+              }
+            }
+          ],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": ""
+        },
+        {
+          "date": "2026-08-28",
+          "dow": "Fri",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-29",
+          "dow": "Sat",
+          "type": "cross",
+          "title": "Cross-train 30min",
+          "targetKm": 0,
+          "targetMin": 30,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-08-30",
+          "dow": "Sun",
+          "type": "long",
+          "title": "Long run/walk (cutback)",
+          "targetKm": 9,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Shorter on purpose. Check in: is resting HR back near 66? Is HRV near 52? If not, the next block gets downgraded."
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "start": "2026-08-31",
+      "end": "2026-09-06",
+      "focus": "Biggest jump of the block. Intervals arrive.",
+      "targetKm": 26,
+      "days": [
+        {
+          "date": "2026-08-31",
+          "dow": "Mon",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-09-01",
+          "dow": "Tue",
+          "type": "easy",
+          "title": "Easy run",
+          "targetKm": 5,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Cap HR at 163. Walk whenever it climbs above \u2014 that is the workout, not a failure."
+        },
+        {
+          "date": "2026-09-02",
+          "dow": "Wed",
+          "type": "strength",
+          "title": "Strength \u2014 legs & core",
+          "targetKm": 0,
+          "targetMin": 40,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-09-03",
+          "dow": "Thu",
+          "type": "intervals",
+          "title": "Threshold intervals",
+          "targetKm": 7,
+          "targetMin": 0,
+          "zone": "Z4",
+          "segments": [
+            {
+              "kind": "warmup",
+              "min": 10,
+              "zone": "Z1",
+              "label": "Easy jog/walk warmup"
+            },
+            {
+              "kind": "repeat",
+              "times": 5,
+              "work": {
+                "min": 3,
+                "zone": "Z4",
+                "label": "3min threshold (177-192)"
+              },
+              "recover": {
+                "min": 2,
+                "zone": "Z1",
+                "label": "2min easy jog"
+              }
+            },
+            {
+              "kind": "cooldown",
+              "min": 10,
+              "zone": "Z1",
+              "label": "Easy jog to cool down"
+            }
+          ],
+          "runWalk": null,
+          "notes": "This is the effort you used to run all your easy runs at. Now it has a purpose and a strict dose."
+        },
+        {
+          "date": "2026-09-04",
+          "dow": "Fri",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-09-05",
+          "dow": "Sat",
+          "type": "cross",
+          "title": "Cross-train 30min",
+          "targetKm": 0,
+          "targetMin": 30,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": null,
+          "notes": "Non-impact only. Sunday is a big one."
+        },
+        {
+          "date": "2026-09-06",
+          "dow": "Sun",
+          "type": "long",
+          "title": "Long run/walk",
+          "targetKm": 14,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 5,
+            "walkMin": 1
+          },
+          "notes": "Move to 5:1 run/walk. Longest run of your life by 6km \u2014 start slower than feels right."
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "start": "2026-09-07",
+      "end": "2026-09-13",
+      "focus": "PEAK WEEK. Dress rehearsal Sunday.",
+      "targetKm": 28,
+      "days": [
+        {
+          "date": "2026-09-07",
+          "dow": "Mon",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-09-08",
+          "dow": "Tue",
+          "type": "easy",
+          "title": "Easy run",
+          "targetKm": 5,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Cap HR at 163. Walk whenever it climbs above \u2014 that is the workout, not a failure."
+        },
+        {
+          "date": "2026-09-09",
+          "dow": "Wed",
+          "type": "strength",
+          "title": "Strength \u2014 light",
+          "targetKm": 0,
+          "targetMin": 30,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": "Last meaningful strength session. Taper starts after this week."
+        },
+        {
+          "date": "2026-09-10",
+          "dow": "Thu",
+          "type": "tempo",
+          "title": "Long tempo",
+          "targetKm": 7,
+          "targetMin": 0,
+          "zone": "Z3",
+          "segments": [
+            {
+              "kind": "warmup",
+              "min": 10,
+              "zone": "Z1",
+              "label": "Easy jog/walk warmup"
+            },
+            {
+              "kind": "repeat",
+              "times": 2,
+              "work": {
+                "min": 10,
+                "zone": "Z3",
+                "label": "10min steady (165-177)"
+              },
+              "recover": {
+                "min": 3,
+                "zone": "Z1",
+                "label": "3min walk"
+              }
+            },
+            {
+              "kind": "cooldown",
+              "min": 10,
+              "zone": "Z1",
+              "label": "Easy jog to cool down"
+            }
+          ],
+          "runWalk": null,
+          "notes": "Race-effort rehearsal in miniature."
+        },
+        {
+          "date": "2026-09-11",
+          "dow": "Fri",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-09-12",
+          "dow": "Sat",
+          "type": "rest",
+          "title": "Rest or 20min walk",
+          "targetKm": 0,
+          "targetMin": 20,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": "Save your legs for tomorrow."
+        },
+        {
+          "date": "2026-09-13",
+          "dow": "Sun",
+          "type": "long",
+          "title": "DRESS REHEARSAL \u2014 16km",
+          "targetKm": 16,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 5,
+            "walkMin": 1
+          },
+          "notes": "Full simulation: race-day kit, race-day shoes, race start time, the exact fuel and water you'll use. Nothing new on race day gets tested after this. Peak long run of the block."
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "start": "2026-09-14",
+      "end": "2026-09-20",
+      "focus": "TAPER. Volume drops, intensity stays sharp.",
+      "targetKm": 24,
+      "days": [
+        {
+          "date": "2026-09-14",
+          "dow": "Mon",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-09-15",
+          "dow": "Tue",
+          "type": "easy",
+          "title": "Easy run",
+          "targetKm": 5,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Cap HR at 163. Walk whenever it climbs above \u2014 that is the workout, not a failure."
+        },
+        {
+          "date": "2026-09-16",
+          "dow": "Wed",
+          "type": "strength",
+          "title": "Strength \u2014 very light",
+          "targetKm": 0,
+          "targetMin": 20,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": "Final strength session of the block. Mobility focus."
+        },
+        {
+          "date": "2026-09-17",
+          "dow": "Thu",
+          "type": "intervals",
+          "title": "Sharpener",
+          "targetKm": 5,
+          "targetMin": 0,
+          "zone": "Z4",
+          "segments": [
+            {
+              "kind": "warmup",
+              "min": 10,
+              "zone": "Z1",
+              "label": "Easy jog/walk warmup"
+            },
+            {
+              "kind": "repeat",
+              "times": 4,
+              "work": {
+                "min": 2,
+                "zone": "Z4",
+                "label": "2min at threshold"
+              },
+              "recover": {
+                "min": 2,
+                "zone": "Z1",
+                "label": "2min easy jog"
+              }
+            },
+            {
+              "kind": "cooldown",
+              "min": 10,
+              "zone": "Z1",
+              "label": "Easy jog to cool down"
+            }
+          ],
+          "runWalk": null,
+          "notes": "Short and snappy. You should finish wanting more."
+        },
+        {
+          "date": "2026-09-18",
+          "dow": "Fri",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-09-19",
+          "dow": "Sat",
+          "type": "easy",
+          "title": "Shakeout",
+          "targetKm": 3,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": ""
+        },
+        {
+          "date": "2026-09-20",
+          "dow": "Sun",
+          "type": "long",
+          "title": "Last long run",
+          "targetKm": 11,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 5,
+            "walkMin": 1
+          },
+          "notes": "Final long effort. Legs should feel springy by the end, not shattered. If they don't, you're carrying fatigue \u2014 take Monday and Tuesday fully off."
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "start": "2026-09-21",
+      "end": "2026-09-27",
+      "focus": "RACE WEEK. Do less than you want to.",
+      "targetKm": 30.1,
+      "days": [
+        {
+          "date": "2026-09-21",
+          "dow": "Mon",
+          "type": "rest",
+          "title": "Rest",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": "Sleep is the only training that matters this week. 7-8h every night."
+        },
+        {
+          "date": "2026-09-22",
+          "dow": "Tue",
+          "type": "easy",
+          "title": "Easy run",
+          "targetKm": 4,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 4,
+            "walkMin": 1
+          },
+          "notes": "Loose and easy. Resist adding distance."
+        },
+        {
+          "date": "2026-09-23",
+          "dow": "Wed",
+          "type": "rest",
+          "title": "Rest or 20min walk",
+          "targetKm": 0,
+          "targetMin": 20,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": ""
+        },
+        {
+          "date": "2026-09-24",
+          "dow": "Thu",
+          "type": "easy",
+          "title": "Primer \u2014 3km with race-pace pickups",
+          "targetKm": 3,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [
+            {
+              "kind": "warmup",
+              "min": 8,
+              "zone": "Z1",
+              "label": "Easy jog/walk warmup"
+            },
+            {
+              "kind": "repeat",
+              "times": 4,
+              "work": {
+                "min": 0.5,
+                "zone": "Z3",
+                "label": "30s at race effort"
+              },
+              "recover": {
+                "min": 2,
+                "zone": "Z1",
+                "label": "2min easy"
+              }
+            },
+            {
+              "kind": "cooldown",
+              "min": 5,
+              "zone": "Z1",
+              "label": "Easy jog to cool down"
+            }
+          ],
+          "runWalk": null,
+          "notes": "Wakes the legs up without costing anything."
+        },
+        {
+          "date": "2026-09-25",
+          "dow": "Fri",
+          "type": "rest",
+          "title": "FULL REST",
+          "targetKm": 0,
+          "targetMin": 0,
+          "zone": null,
+          "segments": [],
+          "runWalk": null,
+          "notes": "Nothing. Lay out your kit tonight. Start hydrating properly."
+        },
+        {
+          "date": "2026-09-26",
+          "dow": "Sat",
+          "type": "easy",
+          "title": "Shakeout + kit check",
+          "targetKm": 2,
+          "targetMin": 0,
+          "zone": "Z1",
+          "segments": [],
+          "runWalk": {
+            "runMin": 5,
+            "walkMin": 1
+          },
+          "notes": "2km very easy, 4 strides. Eat a normal carb-heavy dinner \u2014 not a huge one. Bed early."
+        },
+        {
+          "date": "2026-09-27",
+          "dow": "Sun",
+          "type": "race",
+          "title": "RACE DAY \u2014 Half Marathon 21.1km",
+          "targetKm": 21.1,
+          "targetMin": 0,
+          "zone": "Z2",
+          "segments": [],
+          "runWalk": {
+            "runMin": 5,
+            "walkMin": 1
+          },
+          "notes": "Strategy: 5:1 run/walk FROM THE START \u2014 do not skip the first walk breaks because you feel good. First 5km capped at 162bpm, no exceptions. Let HR drift to Z3 only after 15km. The people who blow past you at 3km are the ones you'll pass at 18km. Finish strong."
+        }
+      ]
+    }
+  ]
+}
