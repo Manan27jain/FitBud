@@ -15,13 +15,32 @@ struct EffortRingView: View {
     /// scale so target and actual can be compared without reading numbers.
     let targetZoneID: String?
 
-    private var ringColor: Color { currentZone?.color ?? .gray }
+    /// Dim Z1 tint for "warming up" — heart rate present but below Z1's
+    /// floor, so `currentZone` is correctly `nil` (a resting or early-run
+    /// heart rate genuinely isn't in a training zone; see `HRZone.zone(for:)`)
+    /// while the ring should still read as alive rather than absent. Shared
+    /// with `EffortPage`'s zone label so both agree on what "warming up"
+    /// looks like.
+    static let warmingUpTint: Color = (HRZone.table.first?.color ?? .gray).opacity(0.45)
+
+    private var ringColor: Color {
+        if let currentZone { return currentZone.color }
+        return heartRate != nil ? Self.warmingUpTint : .gray
+    }
 
     var body: some View {
         Canvas { context, size in
             let rect = CGRect(origin: .zero, size: size).insetBy(dx: 6, dy: 6)
             let scaleRadius = min(rect.width, rect.height) / 2
-            let ringRadius = scaleRadius - Theme.scaleWidth - Theme.ringToScaleGap
+            // Both the scale and the ring are stroked centred on their radii
+            // (half the line width on each side), so the true gap between
+            // the ring's outer edge and the scale's inner edge is
+            // `scaleRadius - scaleWidth/2 - ringToScaleGap - ringRadius -
+            // ringWidth/2`. Solving for `ringRadius` so that equals
+            // `Theme.ringToScaleGap` — subtracting the *full* widths (as
+            // before) ignored the outward half of each stroke and left the
+            // bands overlapping by about half a point instead.
+            let ringRadius = scaleRadius - Theme.scaleWidth / 2 - Theme.ringWidth / 2 - Theme.ringToScaleGap
 
             drawZoneScale(in: &context, center: rect.center, radius: scaleRadius)
             drawPhaseRing(in: &context, center: rect.center, radius: ringRadius)

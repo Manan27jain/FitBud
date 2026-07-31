@@ -7,6 +7,21 @@ struct EffortPage: View {
 
     private var state: WorkoutState { model.state }
 
+    /// "NO ZONE" only when there's no heart-rate sample at all — genuinely
+    /// no signal. Once a sample arrives but sits below Z1's floor (resting
+    /// or early in a run), that's "WARMING UP", not absent: `currentZone`
+    /// stays correctly `nil` from `HRZone.zone(for:)`, but the label and
+    /// tint should read as alive rather than broken.
+    private var zoneLabelText: String {
+        if let zone = state.currentZone { return "\(zone.id) \(zone.name.uppercased())" }
+        return state.heartRate != nil ? "WARMING UP" : "NO ZONE"
+    }
+
+    private var zoneLabelColor: Color {
+        if let zone = state.currentZone { return zone.color }
+        return state.heartRate != nil ? EffortRingView.warmingUpTint : .secondary
+    }
+
     var body: some View {
         ZStack {
             EffortRingView(
@@ -22,9 +37,9 @@ struct EffortPage: View {
                     .monospacedDigit()
                     .foregroundStyle(.white)
 
-                Text(state.currentZone.map { "\($0.id) \($0.name.uppercased())" } ?? "NO ZONE")
+                Text(zoneLabelText)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(state.currentZone?.color ?? .secondary)
+                    .foregroundStyle(zoneLabelColor)
 
                 if let phase = state.runWalkPhase, let remaining = state.phaseRemaining {
                     Text("\(phase == .run ? "RUN" : "WALK") \(formatPace(remaining))")
