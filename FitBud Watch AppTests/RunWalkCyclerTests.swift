@@ -40,3 +40,41 @@ struct RunWalkCyclerTests {
         #expect(fiveToOne.phase(at: 360) == .run)
     }
 }
+
+struct RunWalkRemainingFractionTests {
+    let fourToOne = RunWalkCycler(runSeconds: 240, walkSeconds: 60)
+
+    @Test func startsFullAtTheBeginningOfARunInterval() {
+        #expect(fourToOne.remainingFraction(at: 0) == 1.0)
+    }
+
+    @Test func drainsProportionallyThroughTheRunInterval() {
+        #expect(abs(fourToOne.remainingFraction(at: 120) - 0.5) < 0.001)
+        #expect(abs(fourToOne.remainingFraction(at: 180) - 0.25) < 0.001)
+    }
+
+    @Test func refillsWhenTheWalkBreakBegins() {
+        // The fraction is of the *current* phase, so it resets to full at the
+        // boundary rather than continuing to fall.
+        #expect(fourToOne.remainingFraction(at: 240) == 1.0)
+    }
+
+    @Test func drainsProportionallyThroughTheWalkInterval() {
+        #expect(abs(fourToOne.remainingFraction(at: 270) - 0.5) < 0.001)
+    }
+
+    @Test func staysWithinZeroAndOneAcrossAWholeCycle() {
+        for second in stride(from: 0.0, through: 600.0, by: 0.5) {
+            let fraction = fourToOne.remainingFraction(at: second)
+            #expect(fraction >= 0)
+            #expect(fraction <= 1)
+        }
+    }
+
+    @Test func isUnaffectedByAJumpInElapsedTime() {
+        // Statelessness check: a delayed or dropped sample must not desynchronise
+        // the fraction, because it is recomputed from the clock every time.
+        #expect(fourToOne.remainingFraction(at: 1_200) == 1.0)
+        #expect(abs(fourToOne.remainingFraction(at: 1_320) - 0.5) < 0.001)
+    }
+}
