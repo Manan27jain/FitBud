@@ -11,7 +11,7 @@ import SwiftUI
 struct FitBud_Watch_AppApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
         }
     }
 }
