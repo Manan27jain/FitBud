@@ -1268,8 +1268,7 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
     private var latestDistance: Double = 0
     private var latestEnergy: Double = 0
     private var latestHeartRate: Double?
-    private var heartRateSum: Double = 0
-    private var heartRateCount: Int = 0
+    private var averageHeartRate: Double?
 
     let metrics: AsyncStream<LiveMetrics>
 
@@ -1281,7 +1280,12 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
     }
 
     func start(_ configuration: WorkoutConfiguration) async throws {
+        // Every failure exit must finish the stream. The continuation is created
+        // in `init`, so a consumer may already be sitting in `for await` — most
+        // likely on first launch, before HealthKit permission is granted. Leaving
+        // it unfinished hangs that consumer forever.
         guard HKHealthStore.isHealthDataAvailable() else {
+            continuation?.finish()
             throw WorkoutRecordingError.healthDataUnavailable
         }
 
@@ -1308,6 +1312,7 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
             self.startDate = start
             emit()
         } catch {
+            continuation?.finish()
             throw WorkoutRecordingError.sessionFailed(error)
         }
     }
@@ -1341,7 +1346,7 @@ final class HealthKitWorkoutRecorder: NSObject, WorkoutRecording {
             end: end,
             distanceMeters: latestDistance,
             activeEnergyKcal: latestEnergy,
-            averageHeartRate: heartRateCount > 0 ? heartRateSum / Double(heartRateCount) : nil,
+            averageHeartRate: averageHeartRate,
             splits: splits
         )
     }
@@ -1390,12 +1395,14 @@ extension HealthKitWorkoutRecorder: HKLiveWorkoutBuilderDelegate {
 
                 switch quantityType {
                 case HKQuantityType(.heartRate):
+                    // Most-recent drives the live display; HealthKit's own average
+                    // is time-weighted, unlike a mean over however many callbacks
+                    // happened to arrive.
                     let unit = HKUnit.count().unitDivided(by: .minute())
-                    if let value = statistics.mostRecentQuantity()?.doubleValue(for: unit) {
-                        self.latestHeartRate = value
-                        self.heartRateSum += value
-                        self.heartRateCount += 1
-                    }
+                    self.latestHeartRate = statistics.mostRecentQuantity()?.doubleValue(for: unit)
+                        ?? self.latestHeartRate
+                    self.averageHeartRate = statistics.averageQuantity()?.doubleValue(for: unit)
+                        ?? self.averageHeartRate
                 case HKQuantityType(.distanceWalkingRunning):
                     if let value = statistics.sumQuantity()?.doubleValue(for: .meter()) {
                         self.latestDistance = value
