@@ -269,3 +269,43 @@ plan authoring in-app (plans are generated offline and loaded as JSON).
    itself rather than from history, which is slower to become useful but requires no iPhone.
 2. **Which provider first** — OpenAI or Gemini. Both are implemented behind `AIProviding`;
    only the default and the key in `Secrets.xcconfig` differ.
+
+## 13. Residual risk carried out of Stage 1
+
+Stage 1 shipped with 56 passing tests and a clean final review. These are the things it
+knowingly does **not** cover, recorded here because they outlive the scratch workspace.
+
+**Must be picked up early in Stage 2:**
+
+1. **Session recovery after process death.** `WorkoutSessionModel` is now owned by the `App`
+   rather than the scene, so a scene rebuild during a run can no longer orphan a live
+   `HKWorkoutSession`. Process death still can. watchOS permits one active session, so an
+   orphaned one means the next `start()` hangs on `beginCollection` — the app is stuck and the
+   run is unsaveable. The fix is `HKHealthStore.recoverActiveWorkoutSession()`, deliberately
+   deferred rather than shipped unverified at the gate. This is the single highest-value item
+   in Stage 2 and matters most on exactly the long runs it would ruin.
+
+2. **Nothing has been verified against real sensors.** The simulator has no heart rate, no
+   GPS and no haptics. So the HR field, the per-kilometre split buzz, and the run/walk
+   transition buzz have never fired on a wrist. Everything else — session lifecycle, distance
+   capture, pace maths, the summary, saving to HealthKit — was verified in the simulator,
+   including reading the saved workouts back out of its HealthKit database.
+
+3. **Spec §12.1 is still open.** `HealthHistoryProbe` is built and reachable from the start
+   screen, but the simulator holds no health data, so it reports zero samples for everything.
+   The question it exists to answer — how deep the watch's local history goes — needs one run
+   on the device.
+
+**Accepted for now:**
+
+4. **Structured sessions are unreachable from the UI.** `SegmentTimeline`, `BlockKind`,
+   `.blockChanged` and the block haptic all work and are tested, but every
+   `WorkoutConfiguration` preset is open-ended, so no interval session can be started. Stage 2
+   maps `PlanDay` onto `WorkoutConfiguration`, which is where interval sessions properly
+   arrive. First plan session that needs it is the week-3 tempo run on 17 August.
+
+5. **Splits live only in memory.** They are not written back as `HKWorkoutEvent`s, so they
+   vanish on relaunch. Reconstructible later from the saved distance samples.
+
+6. **`Split.heartRateAtSplit` is instantaneous, not a mean.** Named honestly rather than
+   accumulated. A true per-split average is Stage 2 work if it turns out to be wanted.
