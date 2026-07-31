@@ -21,3 +21,6 @@ xcuserdata/
 
 # Subagent-driven development scratch (ledger, briefs, review packages)
 .superpowers/
+
+# Design reference images (third-party screenshots, not ours to redistribute)
+reference/
