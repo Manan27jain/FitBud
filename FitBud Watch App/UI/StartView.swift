@@ -18,6 +18,17 @@ struct StartView: View {
             if let message = model.errorMessage ?? authorizationMessage {
                 Text(message).font(.footnote).foregroundStyle(.red)
             }
+#if DEBUG
+            // Temporary placement: first in the list, purely so it's reachable
+            // without scrolling on a 46mm screen (only ~3 rows fit). A later
+            // task replaces this whole screen. Kept visually secondary
+            // (footnote, secondary) so it still reads as a dev affordance.
+            Button("Demo run (scripted HR)") {
+                Task { await model.startDemo() }
+            }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+#endif
             ForEach(options, id: \.title) { option in
                 Button(option.title) {
                     Task { await model.start(option) }
@@ -26,13 +37,6 @@ struct StartView: View {
             NavigationLink("Health history probe") {
                 HistoryProbeView()
             }
-#if DEBUG
-            Button("Demo run (scripted HR)") {
-                Task { await model.startDemo() }
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-#endif
         }
         .navigationTitle("FitBud")
         .task {
