@@ -1838,3 +1838,1353 @@ git commit -m "feat: add zone breakdown to the workout summary"
 ## Out of scope
 
 Per spec §9: Activity rings (Move/Exercise/Stand), cadence, stride length, ground contact time, vertical oscillation, running power, elevation, media controls, and user-reorderable views. Zone-crossing haptics are deliberately deferred until hysteresis can be tuned against real running data (spec §10.1).
+
+---
+
+# Part 2 — Plan loading and the home screen
+
+Tasks 1–13 rebuild the *in-workout* experience. Part 2 rebuilds what the athlete sees when they
+**open** the app: today's session from the actual training plan, progress through the block, and
+whether the 80%-easy rule is being obeyed.
+
+This requires loading `half-2026-09-27.json`, which Stage 1 deliberately skipped. It is the
+core of Stage 2, pulled forward because "progress against the plan" cannot be computed without
+it.
+
+**Additional file structure:**
+
+```
+FitBud Watch App/
+  Resources/
+    half-2026-09-27.json      MOVED from repo-root Plan/ — single source of truth, auto-bundled
+  Models/
+    TrainingPlan.swift        NEW  Codable plan models + date lookups. Foundation only.
+    PlanStore.swift           NEW  Loads the bundled plan.
+    BlockProgress.swift       NEW  Pure progress computation.
+    HistoricRun.swift         NEW  A past run read back from HealthKit.
+  Health/
+    WorkoutHistoryReading.swift    NEW  Protocol + HealthKit implementation. Read-only.
+  UI/
+    HomeView.swift            NEW  The new idle screen — replaces StartView as root.
+    SessionListView.swift     NEW  "All sessions" — the old StartView role, now pushed.
+    StartView.swift           DELETED — split into HomeView + SessionListView.
+```
+
+---
+
+### Task 14: Training plan models and decoding
+
+**Files:**
+- Move: `Plan/half-2026-09-27.json` → `FitBud Watch App/Resources/half-2026-09-27.json`
+- Create: `FitBud Watch App/Models/TrainingPlan.swift`
+- Create: `FitBud Watch App/Models/PlanStore.swift`
+- Test: `FitBud Watch AppTests/TrainingPlanTests.swift`
+
+**Interfaces:**
+- Consumes: nothing
+- Produces: `TrainingPlan` (`planId`, `goal`, `weeks`), `TrainingPlan.Goal` (`event`, `date`, `distanceKm`, `strategy`), `PlanWeek` (`index`, `start`, `end`, `focus`, `targetKm`, `days`), `PlanDay` (`date`, `dow`, `type`, `title`, `targetKm`, `targetMin`, `zone`, `segments`, `runWalk`, `notes`, `isRunningSession`), `PlanRunWalk` (`runMin`, `walkMin`), `PlanSegment` enum, `PlanInterval` (`minutes`, `zone`, `label`), `PlanStore.loadBundled()`, `TrainingPlan.day(on:)`, `TrainingPlan.week(containing:)`, `TrainingPlan.daysToRace(from:)`, `PlanDay.dayKey(for:)`
+
+Foundation only — no SwiftUI.
+
+Dates in the JSON are plain `yyyy-MM-dd` local days. All matching is done by **formatting the
+given `Date` to that same string and comparing strings**, which sidesteps every timezone and
+DST question a `Date`-to-`Date` comparison would raise.
+
+- [ ] **Step 1: Move the plan into the app bundle**
+
+```bash
+mkdir -p "FitBud Watch App/Resources"
+git mv Plan/half-2026-09-27.json "FitBud Watch App/Resources/half-2026-09-27.json"
+```
+
+The folder is inside the synchronized group, so the JSON is copied into the bundle
+automatically — the same mechanism that swept a stray `Info.plist` into Copy Bundle Resources
+during Stage 1. No `project.pbxproj` edit.
+
+Then update the two references to the old path so the docs do not lie:
+- `docs/TRAINING-PLAN.md` — the line naming `Plan/half-2026-09-27.json`
+- `docs/superpowers/specs/2026-07-31-fitbud-ai-coach-design.md` §4
+
+- [ ] **Step 2: Write the failing tests**
+
+`FitBud Watch AppTests/TrainingPlanTests.swift`:
+```swift
+import Foundation
+import Testing
+@testable import FitBud_Watch_App
+
+struct TrainingPlanTests {
+    private func loadPlan() throws -> TrainingPlan {
+        try PlanStore.loadBundled()
+    }
+
+    @Test func decodesTheRealBundledPlan() throws {
+        let plan = try loadPlan()
+        #expect(plan.planId == "half-2026-09-27")
+        #expect(plan.goal.event == "Half Marathon")
+        #expect(plan.goal.date == "2026-09-27")
+        #expect(abs(plan.goal.distanceKm - 21.0975) < 0.0001)
+        // Eight training weeks plus the bridge weekend.
+        #expect(plan.weeks.count == 9)
+        #expect(plan.weeks.first?.index == 0)
+        #expect(plan.weeks.last?.index == 8)
+    }
+
+    @Test func everyDayOfTheBlockIsPresent() throws {
+        let plan = try loadPlan()
+        let days = plan.weeks.flatMap(\.days)
+        #expect(days.count == 58)
+    }
+
+    @Test func findsTheSessionForAGivenCalendarDay() throws {
+        let plan = try loadPlan()
+        // 2026-08-04 is the week 1 Tuesday easy run.
+        let day = plan.day(on: try date("2026-08-04"))
+        #expect(day?.title == "Easy run")
+        #expect(day?.targetKm == 4)
+        #expect(day?.zone == "Z2")
+        #expect(day?.runWalk?.runMin == 4)
+        #expect(day?.runWalk?.walkMin == 1)
+    }
+
+    @Test func restDaysDecodeWithNoZoneAndNoRunWalk() throws {
+        let plan = try loadPlan()
+        let day = plan.day(on: try date("2026-08-03"))
+        #expect(day?.type == "rest")
+        #expect(day?.zone == nil)
+        #expect(day?.runWalk == nil)
+        #expect(day?.segments.isEmpty == true)
+        #expect(day?.isRunningSession == false)
+    }
+
+    @Test func decodesWarmupAndRepeatSegments() throws {
+        let plan = try loadPlan()
+        // 2026-08-06 is the strides session: 5 min warmup then 4 strides.
+        let day = plan.day(on: try date("2026-08-06"))
+        #expect(day?.segments.count == 2)
+        guard case let .warmup(minutes, zone, _)? = day?.segments.first else {
+            Issue.record("expected a warmup segment"); return
+        }
+        #expect(minutes == 5)
+        #expect(zone == "Z1")
+        guard case let .repeatBlock(times, work, recover)? = day?.segments.last else {
+            Issue.record("expected a repeat segment"); return
+        }
+        #expect(times == 4)
+        #expect(work.zone == "Z5")
+        #expect(recover.zone == "Z1")
+    }
+
+    @Test func decodesACooldownSegment() throws {
+        let plan = try loadPlan()
+        // 2026-08-20 is the week 3 tempo session, which has all three kinds.
+        let day = plan.day(on: try date("2026-08-20"))
+        let kinds = day?.segments.map { segment -> String in
+            switch segment {
+            case .warmup: "warmup"
+            case .repeatBlock: "repeat"
+            case .cooldown: "cooldown"
+            }
+        }
+        #expect(kinds == ["warmup", "repeat", "cooldown"])
+    }
+
+    @Test func findsTheWeekContainingADate() throws {
+        let plan = try loadPlan()
+        let week = plan.week(containing: try date("2026-08-19"))
+        #expect(week?.index == 3)
+        #expect(week?.targetKm == 22)
+    }
+
+    @Test func countsDaysToRaceDay() throws {
+        let plan = try loadPlan()
+        #expect(plan.daysToRace(from: try date("2026-08-01")) == 57)
+        #expect(plan.daysToRace(from: try date("2026-09-27")) == 0)
+    }
+
+    @Test func aDateOutsideTheBlockHasNoSession() throws {
+        let plan = try loadPlan()
+        #expect(plan.day(on: try date("2026-07-15")) == nil)
+        #expect(plan.day(on: try date("2026-10-05")) == nil)
+    }
+
+    private func date(_ string: String) throws -> Date {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let date = formatter.date(from: string) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "bad date"))
+        }
+        return date
+    }
+}
+```
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
+Expected: FAIL — `cannot find 'PlanStore' in scope`.
+
+- [ ] **Step 4: Write the models**
+
+`FitBud Watch App/Models/TrainingPlan.swift`:
+```swift
+import Foundation
+
+/// One work or recovery period inside a repeat block, as written in the plan JSON.
+struct PlanInterval: Decodable, Equatable, Sendable {
+    let minutes: Double
+    let zone: String
+    let label: String
+
+    private enum CodingKeys: String, CodingKey {
+        case minutes = "min", zone, label
+    }
+}
+
+/// A structured piece of a session. Mirrors the tagged objects in the JSON's
+/// `segments` array.
+enum PlanSegment: Equatable, Sendable {
+    case warmup(minutes: Double, zone: String, label: String)
+    case cooldown(minutes: Double, zone: String, label: String)
+    case repeatBlock(times: Int, work: PlanInterval, recover: PlanInterval)
+}
+
+extension PlanSegment: Decodable {
+    private enum CodingKeys: String, CodingKey {
+        case kind, min, zone, label, times, work, recover
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decode(String.self, forKey: .kind)
+        switch kind {
+        case "warmup":
+            self = .warmup(
+                minutes: try container.decode(Double.self, forKey: .min),
+                zone: try container.decode(String.self, forKey: .zone),
+                label: try container.decodeIfPresent(String.self, forKey: .label) ?? ""
+            )
+        case "cooldown":
+            self = .cooldown(
+                minutes: try container.decode(Double.self, forKey: .min),
+                zone: try container.decode(String.self, forKey: .zone),
+                label: try container.decodeIfPresent(String.self, forKey: .label) ?? ""
+            )
+        case "repeat":
+            self = .repeatBlock(
+                times: try container.decode(Int.self, forKey: .times),
+                work: try container.decode(PlanInterval.self, forKey: .work),
+                recover: try container.decode(PlanInterval.self, forKey: .recover)
+            )
+        default:
+            // Fail loudly rather than silently dropping a session's structure —
+            // a segment kind we don't understand means the plan and the app have
+            // diverged, which is worth knowing about immediately.
+            throw DecodingError.dataCorruptedError(
+                forKey: .kind, in: container,
+                debugDescription: "Unknown plan segment kind '\(kind)'"
+            )
+        }
+    }
+}
+
+struct PlanRunWalk: Decodable, Equatable, Sendable {
+    let runMin: Double
+    let walkMin: Double
+}
+
+/// One day of the plan.
+struct PlanDay: Decodable, Equatable, Sendable {
+    /// `yyyy-MM-dd`, a local calendar day.
+    let date: String
+    let dow: String
+    /// `rest`, `easy`, `long`, `tempo`, `intervals`, `strength`, `cross`, `race`.
+    let type: String
+    let title: String
+    let targetKm: Double
+    let targetMin: Double
+    let zone: String?
+    let segments: [PlanSegment]
+    let runWalk: PlanRunWalk?
+    let notes: String
+
+    /// Whether this day is something the workout recorder can run. Strength and
+    /// cross-training are in the plan but are not tracked by this app, and rest
+    /// days are emphatically not sessions.
+    var isRunningSession: Bool {
+        ["easy", "long", "tempo", "intervals", "race"].contains(type)
+    }
+}
+
+struct PlanWeek: Decodable, Equatable, Sendable {
+    let index: Int
+    let start: String
+    let end: String
+    let focus: String
+    let targetKm: Double
+    let days: [PlanDay]
+}
+
+/// The training plan, decoded from the bundled JSON.
+struct TrainingPlan: Decodable, Equatable, Sendable {
+    struct Goal: Decodable, Equatable, Sendable {
+        let event: String
+        /// `yyyy-MM-dd`.
+        let date: String
+        let distanceKm: Double
+        let strategy: String
+    }
+
+    let planId: String
+    let goal: Goal
+    let weeks: [PlanWeek]
+}
+
+extension TrainingPlan {
+    /// Formats a `Date` the way the plan writes days, so lookups are string
+    /// comparisons. Comparing `Date`s directly would drag in timezone and
+    /// DST questions that a plain calendar day does not have.
+    static func dayKey(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    func day(on date: Date) -> PlanDay? {
+        let key = Self.dayKey(for: date)
+        for week in weeks {
+            if let day = week.days.first(where: { $0.date == key }) { return day }
+        }
+        return nil
+    }
+
+    func week(containing date: Date) -> PlanWeek? {
+        let key = Self.dayKey(for: date)
+        return weeks.first { week in week.days.contains { $0.date == key } }
+    }
+
+    /// Whole days from `date` to race day. Negative once the race has passed.
+    func daysToRace(from date: Date) -> Int {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        guard let raceDay = formatter.date(from: goal.date),
+              let today = formatter.date(from: Self.dayKey(for: date)) else { return 0 }
+        return Calendar.current.dateComponents([.day], from: today, to: raceDay).day ?? 0
+    }
+}
+```
+
+- [ ] **Step 5: Write the store**
+
+`FitBud Watch App/Models/PlanStore.swift`:
+```swift
+import Foundation
+
+enum PlanStoreError: LocalizedError {
+    case notBundled(String)
+    case undecodable(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case let .notBundled(name):
+            "The training plan '\(name).json' isn't in the app bundle."
+        case let .undecodable(error):
+            "The training plan couldn't be read: \(error.localizedDescription)"
+        }
+    }
+}
+
+/// Loads the training plan that ships with the app.
+///
+/// Stage 4 will rewrite the plan in place after each week; this loader is where
+/// that persisted copy will take precedence over the bundled one.
+enum PlanStore {
+    static let bundledPlanName = "half-2026-09-27"
+
+    static func loadBundled(name: String = bundledPlanName) throws -> TrainingPlan {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "json") else {
+            throw PlanStoreError.notBundled(name)
+        }
+        do {
+            return try JSONDecoder().decode(TrainingPlan.self, from: Data(contentsOf: url))
+        } catch {
+            throw PlanStoreError.undecodable(error)
+        }
+    }
+}
+```
+
+- [ ] **Step 6: Run tests to verify they pass**
+
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Expected: PASS — **97 tests**.
+
+If `notBundled` is thrown, the JSON did not reach the bundle. Verify with:
+```bash
+ls build/Build/Products/Debug-watchsimulator/"FitBud Watch App.app"/half-2026-09-27.json
+```
+Do **not** fix this by editing `project.pbxproj`. If the synchronized group did not pick it up,
+report BLOCKED with what you observed.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add "FitBud Watch App/Resources" "FitBud Watch App/Models/TrainingPlan.swift" "FitBud Watch App/Models/PlanStore.swift" "FitBud Watch AppTests/TrainingPlanTests.swift" docs/
+git commit -m "feat: load the training plan from the app bundle"
+```
+
+---
+
+### Task 15: Map a plan day onto a workout configuration
+
+**Files:**
+- Modify: `FitBud Watch App/Models/WorkoutConfiguration.swift`
+- Test: `FitBud Watch AppTests/TrainingPlanTests.swift` (append a new struct)
+
+**Interfaces:**
+- Consumes: `PlanDay`, `PlanSegment`, `PlanInterval`, `PlanRunWalk` (Task 14), `WorkoutSegment`, `Interval`, `RunWalkCycler`
+- Produces: `WorkoutConfiguration.init(planDay: PlanDay)`
+
+Two mapping decisions, both deliberate:
+
+**Minutes → seconds** for `RunWalkCycler`, which works in seconds while the plan is written in
+minutes.
+
+**An open-ended block is always appended** after any structured segments. Every day in this plan
+carries a distance target, and the segments describe structure *within* the run rather than its
+whole length — the strides session is 5 minutes of warmup plus four 20-second strides inside a
+4 km run. Without a trailing open block the timeline would report the session finished after the
+last stride and the athlete would lose their block display two-thirds of the way through. The
+open block goes last, where `SegmentTimeline`'s short-circuit on open blocks is harmless.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `FitBud Watch AppTests/TrainingPlanTests.swift`:
+```swift
+struct PlanDayToConfigurationTests {
+    private func day(_ isoDate: String) throws -> PlanDay {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let plan = try PlanStore.loadBundled()
+        guard let date = formatter.date(from: isoDate), let day = plan.day(on: date) else {
+            throw PlanStoreError.notBundled("day \(isoDate)")
+        }
+        return day
+    }
+
+    @Test func carriesTheTitleAcross() throws {
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-04"))
+        #expect(configuration.title == "Easy run")
+    }
+
+    @Test func convertsRunWalkMinutesToSeconds() throws {
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-04"))
+        #expect(configuration.runWalk?.runSeconds == 240)
+        #expect(configuration.runWalk?.walkSeconds == 60)
+    }
+
+    @Test func aDayWithNoRunWalkHasNoCycler() throws {
+        // Week 3's tempo session is structured but has no run/walk ratio.
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-20"))
+        #expect(configuration.runWalk == nil)
+    }
+
+    @Test func anUnstructuredDayBecomesASingleOpenBlock() throws {
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-04"))
+        #expect(configuration.segments.count == 1)
+        guard case let .openEnded(zone, _) = configuration.segments[0] else {
+            Issue.record("expected one open-ended segment"); return
+        }
+        #expect(zone == "Z2")
+    }
+
+    @Test func structuredDaysExpandAndKeepAnOpenBlockLast() throws {
+        // 5 min warmup + 4x(stride/recover) = 9 blocks, plus the trailing open
+        // block so the run does not report itself finished after the strides.
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-06"))
+        #expect(configuration.segments.count == 10)
+        guard case .warmup = configuration.segments.first else {
+            Issue.record("expected warmup first"); return
+        }
+        guard case .openEnded = configuration.segments.last else {
+            Issue.record("expected an open-ended block last"); return
+        }
+    }
+
+    @Test func repeatBlocksSurviveAsRepeatBlocks() throws {
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-20"))
+        let repeats = configuration.segments.filter { segment in
+            if case .repeatBlock = segment { return true }
+            return false
+        }
+        #expect(repeats.count == 1)
+    }
+
+    @Test func aRestDayStillProducesAUsableConfiguration() throws {
+        // The UI won't offer it, but constructing one must not crash.
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-03"))
+        #expect(configuration.segments.count == 1)
+        #expect(configuration.runWalk == nil)
+    }
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
+Expected: FAIL — no `init(planDay:)`.
+
+- [ ] **Step 3: Write the implementation**
+
+Append to `FitBud Watch App/Models/WorkoutConfiguration.swift`:
+```swift
+extension WorkoutConfiguration {
+    /// Builds a recordable configuration from a day of the training plan.
+    ///
+    /// An open-ended block is always appended last. The plan's segments describe
+    /// structure *within* a distance-based run — the strides session is a warmup
+    /// and four strides inside a 4 km run — so without it the timeline would
+    /// report the session complete after the final stride and the athlete would
+    /// lose their block display mid-run. Placing it last keeps
+    /// `SegmentTimeline`'s open-block short-circuit harmless.
+    init(planDay day: PlanDay) {
+        var segments: [WorkoutSegment] = []
+        for segment in day.segments {
+            switch segment {
+            case let .warmup(minutes, zone, label):
+                segments.append(.warmup(minutes: minutes, zone: zone, label: label))
+            case let .cooldown(minutes, zone, label):
+                segments.append(.cooldown(minutes: minutes, zone: zone, label: label))
+            case let .repeatBlock(times, work, recover):
+                segments.append(.repeatBlock(
+                    times: times,
+                    work: Interval(minutes: work.minutes, zone: work.zone, label: work.label),
+                    recover: Interval(minutes: recover.minutes, zone: recover.zone, label: recover.label)
+                ))
+            }
+        }
+        segments.append(.openEnded(zone: day.zone ?? "Z2", label: day.title))
+
+        self.init(
+            title: day.title,
+            segments: segments,
+            runWalk: day.runWalk.map {
+                RunWalkCycler(runSeconds: $0.runMin * 60, walkSeconds: $0.walkMin * 60)
+            }
+        )
+    }
+}
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Expected: PASS — **104 tests**.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add "FitBud Watch App/Models/WorkoutConfiguration.swift" "FitBud Watch AppTests/TrainingPlanTests.swift"
+git commit -m "feat: map a plan day onto a workout configuration"
+```
+
+---
+
+### Task 16: Read recent runs back from HealthKit
+
+**Files:**
+- Create: `FitBud Watch App/Models/HistoricRun.swift`
+- Create: `FitBud Watch App/Health/WorkoutHistoryReading.swift`
+
+**Interfaces:**
+- Consumes: `HRZone.zone(for:)` (Task 1)
+- Produces: `HistoricRun` (`id`, `date`, `distanceMeters`, `duration`, `averageHeartRate`, `paceSecPerKm`, `zone`, `isEasy`), `@MainActor protocol WorkoutHistoryReading { func recentRuns(since: Date) async throws -> [HistoricRun] }`, `HealthKitWorkoutHistory`
+
+Read-only, and a **separate type from the recorder** — `HealthKitWorkoutRecorder` must not be
+touched. Workout read permission is already requested by `HealthAuthorization`, so no new
+authorization work.
+
+No unit tests: `HKSampleQuery` returns nothing in a test bundle. `HistoricRun`'s derived
+properties are covered indirectly by Task 17's tests, which construct them directly.
+
+- [ ] **Step 1: Write the model**
+
+`FitBud Watch App/Models/HistoricRun.swift`:
+```swift
+import Foundation
+
+/// A completed run read back out of HealthKit, for the home screen's history.
+struct HistoricRun: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let date: Date
+    let distanceMeters: Double
+    let duration: TimeInterval
+    let averageHeartRate: Double?
+
+    var distanceKm: Double { distanceMeters / 1000 }
+
+    var paceSecPerKm: Double? {
+        guard distanceMeters > 0, duration > 0 else { return nil }
+        return duration / (distanceMeters / 1000)
+    }
+
+    /// The zone this run's *average* heart rate falls in. A single average is a
+    /// blunt instrument — a run can average Z2 while spending time either side —
+    /// but it is what HealthKit stores per workout, and it is honest about the
+    /// question the home screen asks: was this run easy or not?
+    var zone: HRZone? {
+        averageHeartRate.flatMap(HRZone.zone(for:))
+    }
+
+    /// Whether this counts toward the plan's 80%-easy rule.
+    var isEasy: Bool {
+        guard let zone else { return false }
+        return zone.id == "Z1" || zone.id == "Z2"
+    }
+}
+```
+
+- [ ] **Step 2: Write the reader**
+
+`FitBud Watch App/Health/WorkoutHistoryReading.swift`:
+```swift
+import Foundation
+import HealthKit
+
+/// Reads finished runs back out of HealthKit.
+///
+/// Deliberately separate from `WorkoutRecording`: this is read-only and must not
+/// share a type with the recorder, which is the most safety-critical file in the
+/// project and is not to be modified.
+@MainActor
+protocol WorkoutHistoryReading {
+    func recentRuns(since date: Date) async throws -> [HistoricRun]
+}
+
+@MainActor
+struct HealthKitWorkoutHistory: WorkoutHistoryReading {
+    private let store = HKHealthStore()
+
+    func recentRuns(since date: Date) async throws -> [HistoricRun] {
+        guard HKHealthStore.isHealthDataAvailable() else { return [] }
+
+        let predicate = HKQuery.predicateForWorkouts(with: .running)
+        let datePredicate = HKQuery.predicateForSamples(withStart: date, end: nil)
+        let combined = NSCompoundPredicate(andPredicateWithSubpredicates: [predicate, datePredicate])
+
+        let workouts: [HKWorkout] = await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: HKObjectType.workoutType(),
+                predicate: combined,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)]
+            ) { _, samples, _ in
+                continuation.resume(returning: (samples as? [HKWorkout]) ?? [])
+            }
+            store.execute(query)
+        }
+
+        return workouts.map { workout in
+            let distanceType = HKQuantityType(.distanceWalkingRunning)
+            let heartRateType = HKQuantityType(.heartRate)
+            let beatsPerMinute = HKUnit.count().unitDivided(by: .minute())
+            return HistoricRun(
+                id: workout.uuid,
+                date: workout.startDate,
+                distanceMeters: workout.statistics(for: distanceType)?
+                    .sumQuantity()?.doubleValue(for: .meter()) ?? 0,
+                duration: workout.duration,
+                averageHeartRate: workout.statistics(for: heartRateType)?
+                    .averageQuantity()?.doubleValue(for: beatsPerMinute)
+            )
+        }
+    }
+}
+```
+
+- [ ] **Step 3: Verify it compiles and the suite is unchanged**
+
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Expected: PASS — **104 tests**.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add "FitBud Watch App/Models/HistoricRun.swift" "FitBud Watch App/Health/WorkoutHistoryReading.swift"
+git commit -m "feat: read recent runs back from HealthKit"
+```
+
+---
+
+### Task 17: Block progress
+
+**Files:**
+- Create: `FitBud Watch App/Models/BlockProgress.swift`
+- Test: `FitBud Watch AppTests/BlockProgressTests.swift`
+
+**Interfaces:**
+- Consumes: `TrainingPlan`, `PlanWeek`, `PlanDay` (Task 14), `HistoricRun` (Task 16)
+- Produces: `BlockProgress` (`daysToRace`, `weekIndex`, `totalWeeks`, `weekFocus`, `plannedKm`, `completedKm`, `plannedSessions`, `completedSessions`, `easyShare`, `volumeFraction`), `blockProgress(plan:runs:asOf:) -> BlockProgress?`
+
+Pure, so the home screen's numbers are tested rather than trusted.
+
+- [ ] **Step 1: Write the failing tests**
+
+`FitBud Watch AppTests/BlockProgressTests.swift`:
+```swift
+import Foundation
+import Testing
+@testable import FitBud_Watch_App
+
+struct BlockProgressTests {
+    private func plan() throws -> TrainingPlan { try PlanStore.loadBundled() }
+
+    private func date(_ string: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: string)!
+    }
+
+    private func run(_ isoDate: String, km: Double, bpm: Double?) -> HistoricRun {
+        HistoricRun(
+            id: UUID(),
+            date: date(isoDate),
+            distanceMeters: km * 1000,
+            duration: km * 540,
+            averageHeartRate: bpm
+        )
+    }
+
+    @Test func reportsTheWeekAndCountdown() throws {
+        let progress = blockProgress(plan: try plan(), runs: [], asOf: date("2026-08-05"))
+        #expect(progress?.weekIndex == 1)
+        #expect(progress?.totalWeeks == 8)
+        #expect(progress?.daysToRace == 53)
+        #expect(progress?.weekFocus == "Reset the effort. Learn to run slow.")
+        #expect(progress?.plannedKm == 16)
+    }
+
+    @Test func countsOnlyRunsInsideTheCurrentWeek() throws {
+        let runs = [
+            run("2026-08-04", km: 4, bpm: 155),   // in week 1
+            run("2026-08-09", km: 8, bpm: 158),   // in week 1
+            run("2026-07-28", km: 5, bpm: 160)    // before the block
+        ]
+        let progress = blockProgress(plan: try plan(), runs: runs, asOf: date("2026-08-05"))
+        #expect(progress?.completedKm == 12)
+        #expect(progress?.completedSessions == 2)
+    }
+
+    @Test func plannedSessionsExcludeRestStrengthAndCrossTraining() throws {
+        // Week 1 has three running days: Tue easy, Thu easy+strides, Sun long.
+        let progress = blockProgress(plan: try plan(), runs: [], asOf: date("2026-08-05"))
+        #expect(progress?.plannedSessions == 3)
+    }
+
+    @Test func easyShareIsTheFractionOfRunsAveragingZoneOneOrTwo() throws {
+        let runs = [
+            run("2026-08-04", km: 4, bpm: 155),   // Z2 — easy
+            run("2026-08-06", km: 4, bpm: 140),   // Z1 — easy
+            run("2026-08-09", km: 8, bpm: 186)    // Z4 — not easy
+        ]
+        let progress = blockProgress(plan: try plan(), runs: runs, asOf: date("2026-08-05"))
+        #expect(abs((progress?.easyShare ?? 0) - (2.0 / 3.0)) < 0.0001)
+    }
+
+    @Test func easyShareIsNilWithNoRunsToJudge() throws {
+        let progress = blockProgress(plan: try plan(), runs: [], asOf: date("2026-08-05"))
+        #expect(progress?.easyShare == nil)
+    }
+
+    @Test func runsWithoutAHeartRateDoNotCountAsEasy() throws {
+        // A run with no HR tells us nothing about effort; counting it as easy
+        // would flatter the number the whole plan is judged on.
+        let runs = [run("2026-08-04", km: 4, bpm: nil)]
+        let progress = blockProgress(plan: try plan(), runs: runs, asOf: date("2026-08-05"))
+        #expect(progress?.easyShare == 0)
+    }
+
+    @Test func volumeFractionIsCappedAtOne() throws {
+        let runs = [run("2026-08-04", km: 40, bpm: 155)]
+        let progress = blockProgress(plan: try plan(), runs: runs, asOf: date("2026-08-05"))
+        #expect(progress?.volumeFraction == 1)
+    }
+
+    @Test func aDateOutsideTheBlockHasNoProgress() throws {
+        #expect(blockProgress(plan: try plan(), runs: [], asOf: date("2026-06-01")) == nil)
+    }
+}
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "error:|✘|\*\* TEST"`
+Expected: FAIL — `cannot find 'blockProgress' in scope`.
+
+- [ ] **Step 3: Write the implementation**
+
+`FitBud Watch App/Models/BlockProgress.swift`:
+```swift
+import Foundation
+
+/// Where the athlete stands in the training block, for the home screen.
+struct BlockProgress: Equatable, Sendable {
+    let daysToRace: Int
+    let weekIndex: Int
+    let totalWeeks: Int
+    let weekFocus: String
+    let plannedKm: Double
+    let completedKm: Double
+    let plannedSessions: Int
+    let completedSessions: Int
+    /// Fraction of this week's runs whose average heart rate was Z1 or Z2, or
+    /// `nil` when there is nothing to judge yet. The plan requires 0.8.
+    let easyShare: Double?
+
+    /// Completed volume as a fraction of planned, capped at 1 so an overshoot
+    /// does not draw a bar past its own track.
+    var volumeFraction: Double {
+        guard plannedKm > 0 else { return 0 }
+        return min(completedKm / plannedKm, 1)
+    }
+}
+
+/// The athlete's position in the block as of `asOf`, or `nil` if that date falls
+/// outside the plan entirely.
+///
+/// Volume and session counts are for the *current week only* — the home screen's
+/// question is "how am I doing this week", not "how am I doing overall", because
+/// the week is the unit the plan progresses in.
+func blockProgress(plan: TrainingPlan, runs: [HistoricRun], asOf date: Date) -> BlockProgress? {
+    guard let week = plan.week(containing: date) else { return nil }
+
+    let weekDayKeys = Set(week.days.map(\.date))
+    let runsThisWeek = runs.filter { weekDayKeys.contains(TrainingPlan.dayKey(for: $0.date)) }
+
+    let runningDays = week.days.filter(\.isRunningSession)
+    let easyShare: Double? = runsThisWeek.isEmpty
+        ? nil
+        : Double(runsThisWeek.filter(\.isEasy).count) / Double(runsThisWeek.count)
+
+    // Week 0 is the two-day calibration bridge, so the block is eight numbered
+    // training weeks regardless of how many entries the array holds.
+    let totalWeeks = plan.weeks.map(\.index).max() ?? 0
+
+    return BlockProgress(
+        daysToRace: plan.daysToRace(from: date),
+        weekIndex: week.index,
+        totalWeeks: totalWeeks,
+        weekFocus: week.focus,
+        plannedKm: week.targetKm,
+        completedKm: runsThisWeek.reduce(0) { $0 + $1.distanceKm },
+        plannedSessions: runningDays.count,
+        completedSessions: runsThisWeek.count,
+        easyShare: easyShare
+    )
+}
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Expected: PASS — **112 tests**.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add "FitBud Watch App/Models/BlockProgress.swift" "FitBud Watch AppTests/BlockProgressTests.swift"
+git commit -m "feat: compute training block progress"
+```
+
+---
+
+### Task 18: The home screen
+
+**Files:**
+- Create: `FitBud Watch App/UI/HomeView.swift`
+- Create: `FitBud Watch App/UI/HomeModel.swift`
+- Create: `FitBud Watch App/UI/SessionListView.swift`
+- Delete: `FitBud Watch App/UI/StartView.swift`
+- Modify: `FitBud Watch App/UI/RootView.swift`
+
+**Interfaces:**
+- Consumes: `PlanStore`, `TrainingPlan`, `PlanDay` (Task 14), `WorkoutConfiguration.init(planDay:)` (Task 15), `WorkoutHistoryReading`/`HealthKitWorkoutHistory`/`HistoricRun` (Task 16), `blockProgress(plan:runs:asOf:)`/`BlockProgress` (Task 17), `HRZone`+`.color`, `Theme`, `WorkoutSessionModel`, `HistoryProbeView`
+- Produces: `HomeModel`, `HomeView(model:)`, `SessionListView(model:)`
+
+This is what the athlete sees when they open the app. Crown-scrolled cards, most actionable
+first: **today's session with a start button**, then the countdown, then this week, then the
+easy-running share, then recent runs.
+
+- [ ] **Step 1: Write the home model**
+
+`FitBud Watch App/UI/HomeModel.swift`:
+```swift
+import Foundation
+import Observation
+
+/// Loads everything the home screen shows: the plan, recent runs, and the
+/// progress derived from both.
+@MainActor
+@Observable
+final class HomeModel {
+    private(set) var plan: TrainingPlan?
+    private(set) var today: PlanDay?
+    private(set) var progress: BlockProgress?
+    private(set) var recentRuns: [HistoricRun] = []
+    private(set) var loadError: String?
+    private(set) var isLoading = true
+
+    private let history: WorkoutHistoryReading
+
+    init(history: WorkoutHistoryReading = HealthKitWorkoutHistory()) {
+        self.history = history
+    }
+
+    /// Reloads on every appearance: the day rolls over, and a run finished
+    /// moments ago should show up without relaunching the app.
+    func load(asOf date: Date = Date()) async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let plan = try PlanStore.loadBundled()
+            self.plan = plan
+            today = plan.day(on: date)
+        } catch {
+            loadError = error.localizedDescription
+            return
+        }
+
+        // Two weeks back covers the current week plus enough context for the
+        // recent-runs list without pulling the athlete's whole history.
+        let since = Calendar.current.date(byAdding: .day, value: -14, to: date) ?? date
+        do {
+            recentRuns = try await history.recentRuns(since: since)
+        } catch {
+            // A history read failure must not take the whole screen down: the
+            // plan and today's session are still worth showing.
+            recentRuns = []
+        }
+
+        if let plan {
+            progress = blockProgress(plan: plan, runs: recentRuns, asOf: date)
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Write the home view**
+
+`FitBud Watch App/UI/HomeView.swift`:
+```swift
+import SwiftUI
+
+/// The screen the athlete opens the app to. Ordered by what they can act on:
+/// today's session first, then why it matters, then how the week is going.
+struct HomeView: View {
+    let model: WorkoutSessionModel
+    @State private var home = HomeModel()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if let loadError = home.loadError {
+                    Text(loadError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+                if let message = model.errorMessage {
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+
+                todayCard
+                countdownCard
+                weekCard
+                easyCard
+                recentCard
+
+                NavigationLink("All sessions") {
+                    SessionListView(model: model)
+                }
+                .font(.footnote)
+
+                NavigationLink("Health history probe") {
+                    HistoryProbeView()
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+
+#if DEBUG
+                Button("Demo run (scripted HR)") {
+                    Task { await model.startDemo() }
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+#endif
+            }
+            .padding(.horizontal, 8)
+        }
+        .navigationTitle("FitBud")
+        .task { await home.load() }
+    }
+
+    // MARK: Today
+
+    @ViewBuilder private var todayCard: some View {
+        if let today = home.today {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("TODAY · \(today.dow.uppercased())")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(today.title)
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if today.isRunningSession {
+                    Text(sessionDetail(today))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        Task { await model.start(WorkoutConfiguration(planDay: today)) }
+                    } label: {
+                        Label("Start", systemImage: "figure.run")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .tint(zoneColor(today.zone))
+                    .padding(.top, 2)
+                } else {
+                    Text(today.notes)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("NO SESSION TODAY")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text("Outside the training block")
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+            }
+        }
+    }
+
+    private func sessionDetail(_ day: PlanDay) -> String {
+        var parts: [String] = []
+        if day.targetKm > 0 {
+            parts.append(String(format: "%.0f km", day.targetKm))
+        }
+        if let zone = day.zone, let hrZone = HRZone.table.first(where: { $0.id == zone }) {
+            parts.append("\(zone) \(hrZone.lowerBPM)–\(hrZone.upperBPM) bpm")
+        }
+        if let runWalk = day.runWalk {
+            parts.append("run \(Int(runWalk.runMin))′/walk \(Int(runWalk.walkMin))′")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func zoneColor(_ id: String?) -> Color {
+        HRZone.table.first { $0.id == id }?.color ?? .green
+    }
+
+    // MARK: Countdown
+
+    @ViewBuilder private var countdownCard: some View {
+        if let progress = home.progress {
+            VStack(alignment: .leading, spacing: -1) {
+                Text("\(progress.daysToRace)")
+                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.elapsedYellow)
+                Text("DAYS TO THE HALF")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                Text("Week \(progress.weekIndex) of \(progress.totalWeeks)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    // MARK: This week
+
+    @ViewBuilder private var weekCard: some View {
+        if let progress = home.progress {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("THIS WEEK")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(String(format: "%.1f", progress.completedKm))
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                    Text("/ \(String(format: "%.0f", progress.plannedKm)) KM")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Text("\(progress.completedSessions)/\(progress.plannedSessions)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+
+                progressBar(fraction: progress.volumeFraction, color: .green)
+
+                Text(progress.weekFocus)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: Easy running
+
+    @ViewBuilder private var easyCard: some View {
+        if let progress = home.progress, let easyShare = progress.easyShare {
+            let onTarget = easyShare >= 0.8
+            VStack(alignment: .leading, spacing: 4) {
+                Text("EASY RUNNING")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text("\(Int((easyShare * 100).rounded()))%")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(onTarget ? .green : .orange)
+                    Text("OF RUNS · TARGET 80%")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                progressBar(fraction: easyShare, color: onTarget ? .green : .orange)
+
+                // The plan's single most important rule, so it says out loud
+                // what to do rather than leaving a number to be interpreted.
+                Text(onTarget
+                     ? "On target. Keep the easy runs easy."
+                     : "Too hard. Slow down and let the walk breaks work.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: Recent runs
+
+    @ViewBuilder private var recentCard: some View {
+        if !home.recentRuns.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("RECENT RUNS")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                ForEach(home.recentRuns.prefix(4)) { run in
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(run.zone?.color ?? .gray.opacity(0.5))
+                            .frame(width: 7, height: 7)
+                        Text(run.date.formatted(.dateTime.day().month(.abbreviated)))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Text(String(format: "%.1f km", run.distanceKm))
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .monospacedDigit()
+                        Spacer(minLength: 0)
+                        Text(run.paceSecPerKm.map { "\(formatPace($0))/km" } ?? "--")
+                            .font(.system(size: 11))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func progressBar(fraction: Double, color: Color) -> some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.12))
+                Capsule()
+                    .fill(color)
+                    .frame(width: max(2, geometry.size.width * fraction))
+            }
+        }
+        .frame(height: 6)
+    }
+}
+```
+
+- [ ] **Step 3: Write the session list**
+
+`FitBud Watch App/UI/SessionListView.swift`:
+```swift
+import SwiftUI
+
+/// Every session type, for when the athlete wants something other than what the
+/// plan prescribes today. Reached from the home screen, so it gets a back button
+/// from the enclosing `NavigationStack` for free.
+struct SessionListView: View {
+    let model: WorkoutSessionModel
+
+    private let options: [WorkoutConfiguration] = [
+        .openEasyRun, .longRun4to1, .longRun5to1
+    ]
+
+    var body: some View {
+        List {
+            ForEach(options, id: \.title) { option in
+                Button {
+                    Task { await model.start(option) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(option.title)
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        Text(subtitle(for: option))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .listStyle(.carousel)
+        .navigationTitle("Sessions")
+    }
+
+    /// Spells out the run/walk ratio so the two long-run options are
+    /// distinguishable at a glance rather than by remembering which is which.
+    private func subtitle(for configuration: WorkoutConfiguration) -> String {
+        guard let runWalk = configuration.runWalk else { return "Continuous · Zone 2" }
+        return "Run \(Int(runWalk.runSeconds / 60)) min · walk \(Int(runWalk.walkSeconds / 60)) min"
+    }
+}
+```
+
+- [ ] **Step 4: Point RootView at HomeView and delete StartView**
+
+In `FitBud Watch App/UI/RootView.swift`, change the `.idle` case to:
+```swift
+            case .idle:
+                HomeView(model: model)
+```
+
+Then: `git rm "FitBud Watch App/UI/StartView.swift"`
+
+Confirm nothing still references it: `grep -rn "StartView" --include="*.swift" .` should return nothing.
+
+- [ ] **Step 5: Run the tests**
+
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Expected: PASS — **112 tests**. If a test referenced `StartView`, update it.
+
+- [ ] **Step 6: Verify on the simulator**
+
+Build, install, launch, screenshot. Then crown-scroll down and screenshot each card.
+
+**Check every one of these and paste what you saw:** today's card names a real session from the
+plan (on 1–2 Aug that is the bridge weekend, so "Rest + 15min mobility" or "Zone 2 calibration
+run"); the countdown shows a plausible number of days in yellow; the week card shows `x / 16 KM`
+for week 1; cards below appear only when they have data (the easy-running card must be absent
+with no runs, not showing 0%); "All sessions" pushes a list **with a working back button**; the
+probe still pushes and returns; nothing is clipped at 46mm.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add "FitBud Watch App/UI/HomeView.swift" "FitBud Watch App/UI/HomeModel.swift" "FitBud Watch App/UI/SessionListView.swift" "FitBud Watch App/UI/RootView.swift"
+git rm "FitBud Watch App/UI/StartView.swift"
+git commit -m "feat: add plan-driven home screen"
+```
+
+---
+
+### Task 19: End-to-end verification pass
+
+**Files:** no new files. Fixes only, wherever this pass finds problems.
+
+This task exists because every preceding task verified its own piece. Nobody has yet driven the
+whole app from launch to saved workout and back in one sitting.
+
+- [ ] **Step 1: Full suite**
+
+Run: `xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" test 2>&1 | grep -E "✔|✘|error:|\*\* TEST"`
+Expected: `** TEST SUCCEEDED **`, **112 tests**.
+
+- [ ] **Step 2: Clean build with warnings visible**
+
+```bash
+rm -rf build
+xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" -derivedDataPath build build 2>&1 | grep -E "warning:|error:|\*\* BUILD"
+```
+Expected: `** BUILD SUCCEEDED **`. **Fix every warning in our own code.** Report any that come
+from the SDK and are not ours.
+
+- [ ] **Step 3: Drive the whole app and screenshot every screen**
+
+Install, launch, and walk the full path, screenshotting and **looking at** each step:
+
+1. Home — all cards
+2. "All sessions" → back
+3. Health history probe → back
+4. Start the demo run
+5. Each of the five live pages via the crown
+6. Pause from Controls, confirm the clock stops; resume, confirm it restarts
+7. End
+8. Summary — hero distance, yellow duration, zone breakdown, splits
+9. "New run" → back to Home
+10. Start a **second** demo run in the same launch and end it — proves nothing is single-use
+
+**Check specifically:** no view is clipped at 46mm; every pushed view has a working back button;
+`LiveWorkoutView` correctly has *no* back button (leaving mid-run must be deliberate); no text
+truncates mid-word where it matters; zone colours agree between the ring, the zones page, the
+summary bar and the recent-runs dots.
+
+- [ ] **Step 4: Confirm the untouchable files were not touched**
+
+```bash
+git diff --stat 906574a..HEAD -- "FitBud Watch App/Health/HealthKitWorkoutRecorder.swift" "FitBud Watch App/Health/WorkoutRecording.swift"
+```
+Expected: **empty output.** If either appears, report it — the recorder was hardened after two
+Critical defects and this plan must not have altered it.
+
+```bash
+git log --oneline -20 -- FitBud.xcodeproj/project.pbxproj
+```
+Expected: nothing newer than the Stage 1 HealthKit entitlement commits.
+
+- [ ] **Step 5: Fix what you found, then re-run steps 1-3**
+
+Commit fixes individually with clear messages. If you found nothing, say so explicitly rather
+than inventing a change.
+
+- [ ] **Step 6: Write the device checklist**
+
+Create `docs/DEVICE-CHECKLIST.md` listing what only a real wrist can verify: heart rate reaching
+the ring, split haptics at each kilometre, run/walk haptics at the interval boundaries, block
+haptics during a structured session, always-on dimmed readability, the workout appearing in
+Apple Fitness, and the history probe's real answer to spec §12.1. Commit it.
+
+## Definition of done for Part 2
+
+- [ ] **112 tests** passing
+- [ ] Clean build with no warnings in our own code
+- [ ] Home screen shows today's real session from the plan with a working Start button
+- [ ] Two workouts recorded back-to-back in one launch
+- [ ] Every pushed view has a back button; the live workout deliberately does not
+- [ ] `HealthKitWorkoutRecorder.swift` and `WorkoutRecording.swift` untouched across the branch
+- [ ] `docs/DEVICE-CHECKLIST.md` written
