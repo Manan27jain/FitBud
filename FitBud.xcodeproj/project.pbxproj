@@ -462,7 +462,7 @@
 				CODE_SIGN_ENTITLEMENTS = "FitBud Watch App/FitBud Watch App.entitlements";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "FitBud reads your heart rate, workouts and recovery data to coach your training.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "FitBud saves your runs to Apple Health.";
-				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
+				INFOPLIST_FILE = "Support/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -496,7 +496,7 @@
 				CODE_SIGN_ENTITLEMENTS = "FitBud Watch App/FitBud Watch App.entitlements";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "FitBud reads your heart rate, workouts and recovery data to coach your training.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "FitBud saves your runs to Apple Health.";
-				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
+				INFOPLIST_FILE = "Support/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
