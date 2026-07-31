@@ -459,6 +459,10 @@
 				INFOPLIST_KEY_CFBundleDisplayName = FitBud;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
+				CODE_SIGN_ENTITLEMENTS = "FitBud Watch App/FitBud Watch App.entitlements";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "FitBud reads your heart rate, workouts and recovery data to coach your training.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "FitBud saves your runs to Apple Health.";
+				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -489,6 +493,10 @@
 				INFOPLIST_KEY_CFBundleDisplayName = FitBud;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
+				CODE_SIGN_ENTITLEMENTS = "FitBud Watch App/FitBud Watch App.entitlements";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "FitBud reads your heart rate, workouts and recovery data to coach your training.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "FitBud saves your runs to Apple Health.";
+				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
