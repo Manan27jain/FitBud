@@ -23,6 +23,10 @@ struct LiveWorkoutView: View {
             SplitsPage(model: model).tag(Page.splits)
         }
         .tabViewStyle(.verticalPage)
+        // Spec §5: SF Rounded throughout. Set once here so all five pages
+        // inherit it — Controls and Splits were largely still on the default
+        // face, and per-page `design:` arguments had drifted apart.
+        .fontDesign(.rounded)
         .navigationBarBackButtonHidden(true)
     }
 }

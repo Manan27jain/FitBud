@@ -28,9 +28,7 @@ struct SummaryView: View {
                     Text(String(format: "%.2f", workout.distanceMeters / 1000))
                         .font(.system(size: 40, weight: .bold, design: .rounded))
                         .monospacedDigit()
-                    Text("KILOMETRES")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                    CaptionLabel("KILOMETRES")
                 }
 
                 Text(formatDuration(workout.duration))
@@ -40,9 +38,7 @@ struct SummaryView: View {
 
                 if !shares.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("TIME IN ZONE")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                        CaptionLabel("TIME IN ZONE")
                         ZoneBreakdownBar(timeInZone: timeInZone, height: 10)
                         ForEach(Array(zip(shares, percentages)), id: \.0.zone.id) { share, percentage in
                             HStack(spacing: 5) {
@@ -65,17 +61,15 @@ struct SummaryView: View {
                     }
                 }
 
-                statRow("Avg pace", workout.averagePaceSecPerKm.map { "\(formatPace($0))/km" } ?? "--")
-                statRow("Avg HR", workout.averageHeartRate.map { "\(Int($0)) bpm" } ?? "--")
-                statRow("Energy", "\(Int(workout.activeEnergyKcal)) kcal")
+                statRow(workout.averagePaceSecPerKm.map(formatPace) ?? "--:--", ["AVG PACE", "/KM"])
+                statRow(workout.averageHeartRate.map { "\(Int($0))" } ?? "--", ["AVERAGE", "HR"])
+                statRow("\(Int(workout.activeEnergyKcal))", ["ACTIVE", "KCAL"])
 
                 if !workout.splits.isEmpty {
-                    Text("SPLITS")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                    CaptionLabel("SPLITS")
                     ForEach(workout.splits, id: \.index) { split in
                         VStack(alignment: .leading, spacing: 2) {
-                            statRow("km \(split.index)", formatPace(split.paceSecPerKm))
+                            statRow(formatPace(split.paceSecPerKm), ["KM \(split.index)"])
                             // Bars scaled against the athlete's own slowest
                             // kilometre, so a fade or a surge is visible without
                             // comparing six numbers to each other.
@@ -98,15 +92,18 @@ struct SummaryView: View {
         .navigationTitle("Done")
     }
 
-    private func statRow(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
+    /// Number-led, caption to the right, exactly as the five live pages read.
+    /// These rows used to be the one surface in the app that inverted Apple's
+    /// grammar — a Title Case label on the left and the value pushed to the
+    /// right margin — which meant the eye had to change direction between the
+    /// hero numbers above and the stats below them.
+    private func statRow(_ value: String, _ label: [String]) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
             Text(value)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(.system(size: 20, weight: .bold, design: .rounded))
                 .monospacedDigit()
+            CaptionLabel(label)
+            Spacer(minLength: 0)
         }
     }
 

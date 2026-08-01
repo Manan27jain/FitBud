@@ -33,7 +33,7 @@ struct EffortPage: View {
 
             VStack(spacing: 0) {
                 Text(state.heartRate.map { "\(Int($0))" } ?? "--")
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                    .font(.system(size: 44, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(.white)
                     // A box big enough for three digits, claimed before the
@@ -44,12 +44,20 @@ struct EffortPage: View {
                     .frame(width: 100, height: 50)
 
                 Text(zoneLabelText)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(Theme.captionFont)
                     .foregroundStyle(zoneLabelColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    // The phase ring's start cap sits at the lower left at
+                    // exactly this height and in exactly this colour, so a
+                    // label wide enough to reach it loses its leading "Z" into
+                    // the ring — "Z4 THRESHOLD" read as "4 THRESHOLD". Keep
+                    // the label inside the ring's clear chord instead.
+                    .frame(width: 100)
 
                 if let phase = state.runWalkPhase, let remaining = state.phaseRemaining {
                     Text("\(phase == .run ? "RUN" : "WALK") \(formatPace(remaining))")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(Theme.captionFont)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                         .padding(.top, 4)

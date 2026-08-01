@@ -9,7 +9,7 @@ struct MetricsPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(formatDuration(state.elapsed))
-                .font(.system(size: 34, weight: .semibold, design: .rounded))
+                .font(Theme.elapsedFont)
                 .monospacedDigit()
                 .foregroundStyle(Theme.elapsedYellow)
 
@@ -25,11 +25,9 @@ struct MetricsPage: View {
     private func row(_ value: String, _ label: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(value)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 28, weight: .bold))
                 .monospacedDigit()
-            Text(label)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+            CaptionLabel(label)
             Spacer(minLength: 0)
         }
     }

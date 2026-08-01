@@ -12,6 +12,7 @@ struct ControlsPage: View {
                     .font(.caption2)
                     .foregroundStyle(.red)
                     .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Button {

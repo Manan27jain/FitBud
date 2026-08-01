@@ -20,23 +20,28 @@ struct SplitsPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 6) {
                 if splits.isEmpty {
-                    Text("No splits yet")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    // Spec §5 is left-aligned throughout. With nothing else
+                    // on the page to give the VStack its width, this row used
+                    // to centre itself and read as a different layout from the
+                    // other four pages.
+                    CaptionLabel("NO SPLITS YET")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 ForEach(splits, id: \.index) { split in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            Text("\(split.index)")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.secondary)
+                            // Number-led like every other surface: the pace
+                            // leads, and the kilometre it belongs to and the
+                            // heart rate it was run at are caption tokens
+                            // beside it.
                             Text(formatPace(split.paceSecPerKm))
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .font(.system(size: 20, weight: .bold))
                                 .monospacedDigit()
+                            CaptionLabel("KM \(split.index)")
                             Spacer(minLength: 0)
                             if let bpm = split.heartRateAtSplit {
-                                Text("\(Int(bpm))")
-                                    .font(.system(size: 12, weight: .medium))
+                                Text("\(Int(bpm))♥")
+                                    .font(Theme.captionFont)
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
                             }

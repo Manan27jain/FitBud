@@ -10,7 +10,7 @@ struct ZonesPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(formatDuration(state.elapsed))
-                .font(.system(size: 26, weight: .semibold, design: .rounded))
+                .font(Theme.elapsedFont)
                 .monospacedDigit()
                 .foregroundStyle(Theme.elapsedYellow)
 
@@ -29,12 +29,12 @@ struct ZonesPage: View {
                 // most likely to be believed.
                 value: state.currentZone.map { formatDuration(state.timeInZone[$0.id] ?? 0) } ?? "--",
                 unit: nil,
-                label: "TIME\nIN ZONE"
+                label: ["TIME", "IN ZONE"]
             )
             metric(
                 value: state.averageHeartRate.map { "\(Int($0))" } ?? "--",
                 unit: "BPM",
-                label: "AVERAGE\nHR"
+                label: ["AVERAGE", "HR"]
             )
             Spacer(minLength: 0)
         }
@@ -56,7 +56,7 @@ struct ZonesPage: View {
                     .overlay {
                         if isActive {
                             Text("♥ \(zone.id)")
-                                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                .font(.system(size: 12, weight: .heavy))
                                 .foregroundStyle(.black)
                         }
                     }
@@ -64,22 +64,24 @@ struct ZonesPage: View {
         }
     }
 
-    private func metric(value: String, unit: String?, label: String?) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 3) {
+    private func metric(value: String, unit: String?, label: [String]?) -> some View {
+        // Apple's `137BPM AVERAGE HR`: the unit sits tight against its number
+        // and the label stands off a little further, so "BPM" and "AVERAGE"
+        // read as two things rather than one run-on phrase now that they share
+        // a size.
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(value)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .font(.system(size: 24, weight: .bold))
                 .monospacedDigit()
             if let unit {
                 Text(unit)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .font(Theme.captionFont)
                     .foregroundStyle(unit == "♥" ? .red : .secondary)
+                    .padding(.leading, 3)
             }
             if let label {
-                Text(label)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(-2)
-                    .fixedSize(horizontal: false, vertical: true)
+                CaptionLabel(label)
+                    .padding(.leading, 6)
             }
             Spacer(minLength: 0)
         }
