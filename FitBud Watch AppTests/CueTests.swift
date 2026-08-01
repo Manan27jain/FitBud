@@ -106,3 +106,52 @@ struct CueRuleDecodingTests {
         #expect(brief.rules[5].trigger == .phaseStarted(.walk))
     }
 }
+
+struct DefaultCueBundleTests {
+    @Test func buildsTheSixSpecifiedRules() {
+        let brief = defaultBrief(targetZone: "Z2", sessionTitle: "Easy run")
+        #expect(brief.rules.count == 6)
+        #expect(brief.opening.isEmpty == false)
+    }
+
+    @Test func theDriftWarningIsTheOnlyImmediateOne() {
+        let brief = defaultBrief(targetZone: "Z2", sessionTitle: "Easy run")
+        let immediate = brief.rules.filter { $0.urgency == .immediate }
+        #expect(immediate.count == 1)
+        #expect(immediate[0].trigger == .zoneAbove(ceiling: "Z2", sustainedSec: 30))
+    }
+
+    @Test func theCeilingFollowsTheSessionsTargetZone() {
+        // A tempo day's ceiling is Z3, not Z2 — warning an athlete off Z3
+        // during a tempo session would be telling them not to do the workout.
+        let brief = defaultBrief(targetZone: "Z3", sessionTitle: "Tempo")
+        #expect(brief.rules.contains { $0.trigger == .zoneAbove(ceiling: "Z3", sustainedSec: 30) })
+    }
+
+    @Test func everyMessageIsWithinTheWordLimit() {
+        for zone in ["Z1", "Z2", "Z3", "Z4"] {
+            for rule in defaultBrief(targetZone: zone, sessionTitle: "Run").rules {
+                #expect(rule.message.split(whereSeparator: \.isWhitespace).count <= CueRule.maxWords)
+            }
+        }
+    }
+
+    @Test func milestoneRulesFireOnlyOnce() {
+        let brief = defaultBrief(targetZone: "Z2", sessionTitle: "Easy run")
+        let halfway = brief.rules.first { $0.trigger == .halfway }
+        let final = brief.rules.first { $0.trigger == .finalKilometre }
+        #expect(halfway?.repeats == false)
+        #expect(final?.repeats == false)
+    }
+
+    @Test func aPlanDayWithNoZoneFallsBackToZ2() throws {
+        let plan = try PlanStore.loadBundled()
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        // 2026-08-03 is a rest day: no zone in the JSON.
+        let restDay = plan.day(on: formatter.date(from: "2026-08-03")!)
+        let brief = defaultBrief(for: restDay)
+        #expect(brief.rules.contains { $0.trigger == .zoneAbove(ceiling: "Z2", sustainedSec: 30) })
+    }
+}
