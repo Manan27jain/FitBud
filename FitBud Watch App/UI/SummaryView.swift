@@ -7,6 +7,7 @@ struct SummaryView: View {
     /// Non-nil when the run could not be saved to HealthKit. The numbers below
     /// are then reconstructed from live state rather than read back from Health.
     let errorMessage: String?
+    let analysis: WorkoutAnalysis?
     let onDone: () -> Void
 
     private var shares: [ZoneShare] { zoneShares(timeInZone: timeInZone) }
@@ -35,6 +36,18 @@ struct SummaryView: View {
                     .font(.system(size: 26, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(Theme.elapsedYellow)
+
+                if let analysis {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(analysis.summary)
+                            .font(.system(size: 13, design: .rounded))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(analysis.takeaway)
+                            .font(.system(size: 12, design: .rounded))
+                            .foregroundStyle(Theme.elapsedYellow)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
 
                 if !shares.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {

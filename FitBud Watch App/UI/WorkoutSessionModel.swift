@@ -23,6 +23,7 @@ final class WorkoutSessionModel {
     private(set) var currentCue: Cue?
     /// True once a brief — real or default — is loaded and cues can fire.
     private(set) var coachIsReady = false
+    private(set) var analysis: WorkoutAnalysis?
 
     private var recorder: WorkoutRecording
     /// The recorder this model was configured with — the real one in
@@ -46,6 +47,7 @@ final class WorkoutSessionModel {
     private var lastServedBreak: Int?
     private var dismissTask: Task<Void, Never>?
     private var briefTask: Task<Void, Never>?
+    private var analysisTask: Task<Void, Never>?
     /// Bumped on every successful `start(_:)`. Captured by `loadBrief`'s
     /// background task so a brief fetched for an earlier workout can tell,
     /// on resume, that it no longer belongs — `phase == .running` alone
@@ -348,6 +350,26 @@ final class WorkoutSessionModel {
         }
     }
 
+    /// Fetched after the run is already saved and the summary already on
+    /// screen. It appears if it arrives and is simply absent if it does not.
+    private func requestAnalysis(for workout: CompletedWorkout) {
+        guard let provider else { return }
+        let planDay = (try? PlanStore.loadBundled())?.day(on: Date())
+        guard let context = CoachContextBuilder.build(planDay: planDay) else { return }
+        // Cancel any analysis still in flight from a previous workout, so a
+        // stale analysis can't land on the current one's summary.
+        analysisTask?.cancel()
+        let generation = workoutGeneration
+        analysisTask = Task { [weak self] in
+            guard let result = try? await provider.analyze(workout: workout, context: context) else { return }
+            // Only apply this analysis if we're still on the same workout
+            // generation. If the athlete started a new run while this was in
+            // flight, reject it rather than contaminating the new run's summary.
+            guard let self, self.workoutGeneration == generation else { return }
+            self.analysis = result
+        }
+    }
+
     /// The one door into `.finished`, used by a successful `end()`, a failed
     /// `end()`, and `pump()`'s catch block (the session dying on its own).
     /// Three call sites used to each assign `finishedTimeInZone` themselves;
@@ -359,6 +381,7 @@ final class WorkoutSessionModel {
     private func finish(_ workout: CompletedWorkout) {
         finishedTimeInZone = state.timeInZone
         phase = .finished(workout)
+        requestAnalysis(for: workout)
     }
 
     /// Reconstructs a summary from live state when HealthKit refuses to hand one
@@ -387,6 +410,7 @@ final class WorkoutSessionModel {
         state = WorkoutState()
         errorMessage = nil
         finishedTimeInZone = [:]
+        analysis = nil
         phase = .idle
         recorder = configuredRecorder
         liveCueTask?.cancel()
@@ -395,6 +419,8 @@ final class WorkoutSessionModel {
         dismissTask = nil
         briefTask?.cancel()
         briefTask = nil
+        analysisTask?.cancel()
+        analysisTask = nil
         coachEngine = nil
         currentCue = nil
         coachIsReady = false

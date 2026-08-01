@@ -18,6 +18,7 @@ struct RootView: View {
                     workout: workout,
                     timeInZone: model.finishedTimeInZone,
                     errorMessage: model.errorMessage,
+                    analysis: model.analysis,
                     onDone: { model.reset() }
                 )
             }
