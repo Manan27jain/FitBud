@@ -55,7 +55,7 @@ Two findings drive the product:
 Generated once, offline, from the health export. The app consumes it; it does not author it.
 
 - Human-readable: `docs/TRAINING-PLAN.md`
-- Machine-readable: `Plan/half-2026-09-27.json` — the app's source of truth
+- Machine-readable: `FitBud Watch App/Resources/half-2026-09-27.json` — the app's source of truth
 
 Structure: 8 weeks (Mon 2026-08-03 → race Sun 2026-09-27) plus a 2-day calibration bridge.
 Volume 16 → 19 → 22 → **17 (cutback)** → 26 → 28 → 24 → 9 + race.
