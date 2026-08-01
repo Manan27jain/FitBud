@@ -21,6 +21,13 @@ final class WorkoutSessionModel {
     private(set) var finishedTimeInZone: [String: TimeInterval] = [:]
 
     private var recorder: WorkoutRecording
+    /// The recorder this model was configured with — the real one in
+    /// production, a test double under test. `startDemo()` swaps `recorder`
+    /// for a scripted one that never touches HealthKit; `reset()` restores it
+    /// from here so a debug session's demo run can't silently leave every
+    /// later *real* session on the fake recorder for the rest of the launch.
+    /// A no-op wherever `recorder` was never swapped away from this.
+    private let configuredRecorder: WorkoutRecording
     private let haptics: HapticPlaying
     private var engine: WorkoutEngine?
     private var pumpTask: Task<Void, Never>?
@@ -33,7 +40,9 @@ final class WorkoutSessionModel {
     // already on the main actor. Defaulting to `nil` and constructing inside
     // the (actor-isolated) init body sidesteps that without changing behavior.
     init(recorder: WorkoutRecording? = nil, haptics: HapticPlaying = WatchHaptics()) {
-        self.recorder = recorder ?? HealthKitWorkoutRecorder()
+        let recorder = recorder ?? HealthKitWorkoutRecorder()
+        self.recorder = recorder
+        self.configuredRecorder = recorder
         self.haptics = haptics
     }
 
@@ -211,5 +220,6 @@ final class WorkoutSessionModel {
         errorMessage = nil
         finishedTimeInZone = [:]
         phase = .idle
+        recorder = configuredRecorder
     }
 }
