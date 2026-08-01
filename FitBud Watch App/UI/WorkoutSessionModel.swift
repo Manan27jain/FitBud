@@ -16,6 +16,9 @@ final class WorkoutSessionModel {
     private(set) var phase: Phase = .idle
     private(set) var state = WorkoutState()
     private(set) var errorMessage: String?
+    /// Zone time from the finished workout. `state` is cleared by `reset()`, but
+    /// the summary still needs this after the run has ended.
+    private(set) var finishedTimeInZone: [String: TimeInterval] = [:]
 
     private var recorder: WorkoutRecording
     private let haptics: HapticPlaying
@@ -147,6 +150,7 @@ final class WorkoutSessionModel {
         pumpTask = nil
 
         let splits = state.splits
+        finishedTimeInZone = state.timeInZone
         do {
             let workout = try await recorder.end(splits: splits)
             // A stale message from an earlier pause/resume failure (or a
@@ -193,6 +197,7 @@ final class WorkoutSessionModel {
         engine = nil
         state = WorkoutState()
         errorMessage = nil
+        finishedTimeInZone = [:]
         phase = .idle
     }
 }

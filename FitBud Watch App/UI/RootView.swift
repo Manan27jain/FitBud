@@ -15,6 +15,7 @@ struct RootView: View {
             case let .finished(workout):
                 SummaryView(
                     workout: workout,
+                    timeInZone: model.finishedTimeInZone,
                     errorMessage: model.errorMessage,
                     onDone: { model.reset() }
                 )
