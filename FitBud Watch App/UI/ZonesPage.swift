@@ -22,7 +22,12 @@ struct ZonesPage: View {
                 label: nil
             )
             metric(
-                value: formatDuration(state.timeInZone[state.currentZone?.id ?? ""] ?? 0),
+                // With no current zone there is no "time in zone" to report,
+                // and `?? ""` used to look one up under an empty key and print
+                // a confident 0:00 — during warm-up, and any time the sensor
+                // drops out mid-run, which is exactly when a wrong zero is
+                // most likely to be believed.
+                value: state.currentZone.map { formatDuration(state.timeInZone[$0.id] ?? 0) } ?? "--",
                 unit: nil,
                 label: "TIME\nIN ZONE"
             )

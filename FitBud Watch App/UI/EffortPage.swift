@@ -36,6 +36,12 @@ struct EffortPage: View {
                     .font(.system(size: 44, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.white)
+                    // A box big enough for three digits, claimed before the
+                    // first sample lands. "--" is narrower than "148", so
+                    // without this the hero — and the zone label and countdown
+                    // stacked under it — re-centre themselves the moment the
+                    // heart rate arrives, 5–15 seconds into every single run.
+                    .frame(width: 100, height: 50)
 
                 Text(zoneLabelText)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
