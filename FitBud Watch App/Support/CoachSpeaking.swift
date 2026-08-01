@@ -17,7 +17,17 @@ protocol CoachSpeaking {
 final class WatchCoachSpeaker: NSObject, CoachSpeaking {
     private let synthesizer = AVSpeechSynthesizer()
 
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
     var canBeHeard: Bool {
+        #if targetEnvironment(simulator)
+        // The simulator's "speaker" is the Mac's — exactly where a developer
+        // wants to hear it. Real-device behaviour below is unchanged.
+        return true
+        #else
         let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
         return outputs.contains { output in
             switch output.portType {
@@ -27,6 +37,7 @@ final class WatchCoachSpeaker: NSObject, CoachSpeaking {
                 false
             }
         }
+        #endif
     }
 
     func speak(_ text: String) {
@@ -53,6 +64,25 @@ final class WatchCoachSpeaker: NSObject, CoachSpeaking {
 
     func stop() {
         synthesizer.stopSpeaking(at: .immediate)
+    }
+}
+
+extension WatchCoachSpeaker: AVSpeechSynthesizerDelegate {
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        deactivateSessionIfIdle()
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        deactivateSessionIfIdle()
+    }
+
+    /// A cue that replaces another mid-utterance cancels the old one after the
+    /// new one has already started speaking, so this only deactivates when
+    /// nothing is speaking — never pulling the session out from under fresh
+    /// speech.
+    private func deactivateSessionIfIdle() {
+        guard !synthesizer.isSpeaking else { return }
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 }
 

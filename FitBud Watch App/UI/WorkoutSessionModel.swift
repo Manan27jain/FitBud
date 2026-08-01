@@ -98,7 +98,7 @@ final class WorkoutSessionModel {
     func present(_ cue: Cue) {
         currentCue = cue
         lastPresentedAt = state.elapsed
-        haptics.play(.splitCompleted)
+        haptics.play(.coachCue)
         if settings?.isSpeechEnabled == true {
             speaker?.speak(cue.message)
         }

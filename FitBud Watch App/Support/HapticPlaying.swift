@@ -7,6 +7,7 @@ enum WorkoutHaptic: Hashable, Sendable {
     case startWalking
     case blockChanged
     case workoutComplete
+    case coachCue
 }
 
 /// Which haptic an event deserves. Every event gets one, and the four are
@@ -41,6 +42,9 @@ struct WatchHaptics: HapticPlaying {
         // start/stop pair, so the three read differently through a sleeve.
         case .blockChanged: .directionUp
         case .workoutComplete: .success
+        // Distinct from every haptic above, so a coaching cue reads
+        // differently on the wrist from a split, a phase change or a block.
+        case .coachCue: .directionDown
         }
         WKInterfaceDevice.current().play(type)
     }
