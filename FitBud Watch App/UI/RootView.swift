@@ -7,13 +7,17 @@ struct RootView: View {
     let settings: CoachSettings
 
     var body: some View {
-        NavigationStack {
-            switch model.phase {
-            case .idle:
+        switch model.phase {
+        case .idle:
+            NavigationStack {
                 HomeView(model: model, settings: settings)
-            case .running, .paused:
+            }
+        case .running, .paused:
+            NavigationStack {
                 LiveWorkoutView(model: model)
-            case let .finished(workout):
+            }
+        case let .finished(workout):
+            NavigationStack {
                 SummaryView(
                     workout: workout,
                     timeInZone: model.finishedTimeInZone,
