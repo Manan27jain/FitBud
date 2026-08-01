@@ -4,6 +4,7 @@ import SwiftUI
 /// today's session first, then why it matters, then how the week is going.
 struct HomeView: View {
     let model: WorkoutSessionModel
+    let settings: CoachSettings
     @State private var home = HomeModel()
 
     // Carried over from the `StartView` this screen replaces: it was the
@@ -38,6 +39,11 @@ struct HomeView: View {
 
                 NavigationLink("All sessions") {
                     SessionListView(model: model)
+                }
+                .font(.footnote)
+
+                NavigationLink("Settings") {
+                    SettingsView(settings: settings)
                 }
                 .font(.footnote)
 

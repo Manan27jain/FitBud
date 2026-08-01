@@ -22,10 +22,18 @@ struct FitBud_Watch_AppApp: App {
     // the process entirely needs `HKHealthStore.recoverActiveWorkoutSession()`,
     // deliberately deferred to Stage 2.
     @State private var model = WorkoutSessionModel()
+    @State private var settings = CoachSettings()
 
     var body: some Scene {
         WindowGroup {
-            RootView(model: model)
+            RootView(model: model, settings: settings)
+                .task {
+                    model.configureCoach(
+                        provider: settings.makeProvider(),
+                        speaker: WatchCoachSpeaker(),
+                        settings: settings
+                    )
+                }
         }
     }
 }
