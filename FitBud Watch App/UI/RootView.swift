@@ -9,7 +9,7 @@ struct RootView: View {
         NavigationStack {
             switch model.phase {
             case .idle:
-                StartView(model: model)
+                HomeView(model: model)
             case .running, .paused:
                 LiveWorkoutView(model: model)
             case let .finished(workout):
