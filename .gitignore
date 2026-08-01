@@ -24,3 +24,6 @@ xcuserdata/
 
 # Design reference images (third-party screenshots, not ours to redistribute)
 reference/
+
+# The real API keys. Secrets.example.plist documents the shape and IS committed.
+Secrets.plist
