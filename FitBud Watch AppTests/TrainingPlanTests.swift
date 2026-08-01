@@ -107,3 +107,71 @@ struct TrainingPlanTests {
         return date
     }
 }
+
+struct PlanDayToConfigurationTests {
+    private func day(_ isoDate: String) throws -> PlanDay {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let plan = try PlanStore.loadBundled()
+        guard let date = formatter.date(from: isoDate), let day = plan.day(on: date) else {
+            throw PlanStoreError.notBundled("day \(isoDate)")
+        }
+        return day
+    }
+
+    @Test func carriesTheTitleAcross() throws {
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-04"))
+        #expect(configuration.title == "Easy run")
+    }
+
+    @Test func convertsRunWalkMinutesToSeconds() throws {
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-04"))
+        #expect(configuration.runWalk?.runSeconds == 240)
+        #expect(configuration.runWalk?.walkSeconds == 60)
+    }
+
+    @Test func aDayWithNoRunWalkHasNoCycler() throws {
+        // Week 3's tempo session is structured but has no run/walk ratio.
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-20"))
+        #expect(configuration.runWalk == nil)
+    }
+
+    @Test func anUnstructuredDayBecomesASingleOpenBlock() throws {
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-04"))
+        #expect(configuration.segments.count == 1)
+        guard case let .openEnded(zone, _) = configuration.segments[0] else {
+            Issue.record("expected one open-ended segment"); return
+        }
+        #expect(zone == "Z2")
+    }
+
+    @Test func structuredDaysExpandAndKeepAnOpenBlockLast() throws {
+        // 5 min warmup + repeat block (with 4 strides) + trailing open block.
+        // The timeline will expand the repeat into 9 blocks total, plus the open.
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-06"))
+        #expect(configuration.segments.count == 3)
+        guard case .warmup = configuration.segments.first else {
+            Issue.record("expected warmup first"); return
+        }
+        guard case .openEnded = configuration.segments.last else {
+            Issue.record("expected an open-ended block last"); return
+        }
+    }
+
+    @Test func repeatBlocksSurviveAsRepeatBlocks() throws {
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-20"))
+        let repeats = configuration.segments.filter { segment in
+            if case .repeatBlock = segment { return true }
+            return false
+        }
+        #expect(repeats.count == 1)
+    }
+
+    @Test func aRestDayStillProducesAUsableConfiguration() throws {
+        // The UI won't offer it, but constructing one must not crash.
+        let configuration = WorkoutConfiguration(planDay: try day("2026-08-03"))
+        #expect(configuration.segments.count == 1)
+        #expect(configuration.runWalk == nil)
+    }
+}

@@ -27,3 +27,40 @@ struct WorkoutConfiguration: Equatable, Sendable {
         runWalk: RunWalkCycler(runSeconds: 300, walkSeconds: 60)
     )
 }
+
+extension WorkoutConfiguration {
+    /// Builds a recordable configuration from a day of the training plan.
+    ///
+    /// An open-ended block is always appended last. The plan's segments describe
+    /// structure *within* a distance-based run — the strides session is a warmup
+    /// and four strides inside a 4 km run — so without it the timeline would
+    /// report the session complete after the final stride and the athlete would
+    /// lose their block display mid-run. Placing it last keeps
+    /// `SegmentTimeline`'s open-block short-circuit harmless.
+    init(planDay day: PlanDay) {
+        var segments: [WorkoutSegment] = []
+        for segment in day.segments {
+            switch segment {
+            case let .warmup(minutes, zone, label):
+                segments.append(.warmup(minutes: minutes, zone: zone, label: label))
+            case let .cooldown(minutes, zone, label):
+                segments.append(.cooldown(minutes: minutes, zone: zone, label: label))
+            case let .repeatBlock(times, work, recover):
+                segments.append(.repeatBlock(
+                    times: times,
+                    work: Interval(minutes: work.minutes, zone: work.zone, label: work.label),
+                    recover: Interval(minutes: recover.minutes, zone: recover.zone, label: recover.label)
+                ))
+            }
+        }
+        segments.append(.openEnded(zone: day.zone ?? "Z2", label: day.title))
+
+        self.init(
+            title: day.title,
+            segments: segments,
+            runWalk: day.runWalk.map {
+                RunWalkCycler(runSeconds: $0.runMin * 60, walkSeconds: $0.walkMin * 60)
+            }
+        )
+    }
+}
