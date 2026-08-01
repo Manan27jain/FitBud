@@ -179,15 +179,24 @@ With nothing paired the message is still shown and still buzzes, silently.
 
 ## 7. Configuration
 
-The key lives in `Secrets.xcconfig`, which `.gitignore` already covers:
+The key lives in `FitBud Watch App/Resources/Secrets.plist`, gitignored, alongside a committed
+`Secrets.example.plist` documenting its shape:
 
-```
-OPENAI_API_KEY = sk-...
-GEMINI_API_KEY =
+```xml
+<dict>
+    <key>OPENAI_API_KEY</key><string>sk-...</string>
+    <key>GEMINI_API_KEY</key><string></string>
+</dict>
 ```
 
-surfaced through the existing `Support/Info.plist` as `$(OPENAI_API_KEY)` and read with
-`Bundle.main.object(forInfoDictionaryKey:)`.
+read with `Bundle.main.url(forResource: "Secrets", withExtension: "plist")`.
+
+**Not an `.xcconfig`, despite that being the obvious choice.** The project has no
+`baseConfigurationReference`, so an xcconfig would simply never be read — and adding one means
+editing `project.pbxproj`, which this project forbids because Xcode rewrites that file
+cosmetically on most builds and a hand edit is easy to lose. A plist in `Resources/` is picked
+up automatically by the Xcode 16 synchronized folder group, the same mechanism that already
+bundles `half-2026-09-27.json`. Fewer moving parts, no project-file surgery.
 
 **A key in an app bundle is readable by anyone holding the bundle.** For a personal, sideloaded,
 single-user app that is an acceptable trade and worth stating plainly; it would not be
@@ -200,8 +209,11 @@ requires no change above it.
 
 ## 8. Cost
 
-A small, fast model — the exact identifier is a configuration value to be confirmed at
-implementation time rather than hardcoded from memory here.
+**`gpt-5-mini`**, held as a single constant so it is changed in one place. Fast, cheap, and
+supports strict structured output via `response_format: json_schema` — which is what makes the
+cue bundle safe to decode rather than hopeful. `gpt-5-nano` is cheaper still and is the fallback
+if latency at walk breaks disappoints, but nano is tuned for classification and extraction, and
+writing coaching lines with any personality is neither.
 
 Per run: one brief (~1200 in / 400 out), roughly seven live cues (~800 in / 40 out each), one
 analysis (~1500 in / 250 out) — on the order of **10k tokens**. At four runs a week this is
