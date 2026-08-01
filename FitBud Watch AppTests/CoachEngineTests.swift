@@ -158,4 +158,17 @@ struct CoachEngineTests {
                                 message: "Pick it up.", urgency: .immediate, repeats: true)])
         #expect(e.evaluate(state: state(elapsed: 300, hr: 120, phase: .walk), events: []) == nil)
     }
+
+    @Test func theMinimumGapSubsumesOnePerWalkBreak() throws {
+        // Rule 4 ("at most one cue per walk break") isn't enforced by any
+        // break-identity bookkeeping in the engine — it holds only because
+        // minimumGap outlasts every walk break the plan actually contains.
+        // This reads the real bundled plan rather than hardcoding 60s, so it
+        // breaks loudly if a future plan ever carries a walk break that
+        // catches up to minimumGap.
+        let plan = try PlanStore.loadBundled()
+        let walkBreakMinutes = plan.weeks.flatMap(\.days).compactMap { $0.runWalk?.walkMin }
+        let longestWalkBreakSec = (walkBreakMinutes.max() ?? 0) * 60
+        #expect(CoachEngine.minimumGap > longestWalkBreakSec)
+    }
 }

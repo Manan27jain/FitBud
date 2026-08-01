@@ -9,6 +9,20 @@ import Foundation
 /// project.
 struct CoachEngine {
     /// Spec section 4.
+    ///
+    /// This constant also carries spec rule 4, "at most one cue per walk
+    /// break" — deliberately, not by accident. `deliverQueued` has no
+    /// break-identity bookkeeping of its own (that lives in the caller, e.g.
+    /// `WorkoutSessionModel`'s own walk-break counter, which gates a
+    /// different concern: one live network call per break). Rule 4 holds
+    /// here purely because no walk break in the bundled plan reaches 90s —
+    /// every one is 60s (4:1 through week 4, 5:1 from week 5, both 60-second
+    /// walks) — so a second delivery inside a single break would need more
+    /// time than the break has to give. `CoachEngineTests
+    /// .theMinimumGapSubsumesOnePerWalkBreak` pins this against the real
+    /// bundled plan. Lowering this constant, or introducing a plan whose walk
+    /// breaks reach or exceed it, breaks rule 4 silently unless that
+    /// invariant is restored.
     static let minimumGap: TimeInterval = 90
     static let urgentFloor: TimeInterval = 45
     /// A queued cue older than this has missed its moment and is dropped.
