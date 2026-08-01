@@ -139,3 +139,36 @@ Ordered by value per effort; none are in this round's scope:
 
 Suite currently 177; C adds engine and decoding tests. `HealthKitWorkoutRecorder` and
 `WorkoutRecording` remain untouched, as ever.
+
+---
+
+## 5. Follow-up round: navigation and app icon (2026-08-02)
+
+### E7 — Starting a session from the Sessions list showed nothing until you tapped back
+
+`UI/RootView.swift` wrapped a **single** `NavigationStack` around a `switch model.phase`.
+`HomeView` was that stack's *root* when idle, and it pushes `SessionListView` on top of it.
+Tapping a session called `start(...)`, setting `phase = .running`, which swapped the stack's
+**root** from `HomeView` to `LiveWorkoutView` — while `SessionListView` remained pushed
+above it. The root changed underneath the pushed view, so the athlete kept looking at the
+session list while a workout recorded invisibly behind it. Tapping back popped the pushed
+view and revealed the workout, which is exactly the reported symptom.
+
+**Fix:** move the `NavigationStack` inside each switch branch, so every phase owns its own
+stack. A phase change then destroys the entire stack — pushed views included — rather than
+swapping a root beneath them.
+
+A programmatic `NavigationPath` was rejected: `HomeView`'s links are closure-based
+`NavigationLink { } label: { }`, which never route through a path, so clearing one could not
+pop them.
+
+Verified on the simulator: tapping "Easy run" from the Sessions list lands directly on the
+Effort page with no back tap. The five live-page titles still render (each branch has a
+stack), `LiveWorkoutView` still has no back button, and the pushed views from Home still do.
+
+### E8 — No app icon
+
+`logo/logo.png` (1254×1254, no alpha) resized to the single 1024×1024 universal slot the
+`AppIcon.appiconset` expects. watchOS rejects icons with an alpha channel; the source has
+none and the generated file was checked. The 1.2 MB source stays out of the repo — only the
+generated icon lives in the asset catalog.
