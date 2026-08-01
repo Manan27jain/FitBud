@@ -63,6 +63,28 @@ struct BlockProgressTests {
         #expect(progress?.easyShare == nil)
     }
 
+    /// The flagship number of the redesign used to call the easiest possible
+    /// run "too hard". `HRZone.zone(for:)` returns nil below 133 bpm as well as
+    /// when there is no heart rate, and `isEasy` treated both as not-easy — so
+    /// a recovery jog averaging 130 printed "Too hard. Slow down and let the
+    /// walk breaks work." at the athlete.
+    @Test func aRunBelowZoneOneIsEasierThanEasy() throws {
+        let runs = [run("2026-08-04", km: 4, bpm: 130)]
+        let progress = blockProgress(plan: try plan(), runs: runs, asOf: date("2026-08-05"))
+        #expect(progress?.easyShare == 1)
+    }
+
+    /// The boundary itself: 133 is Z1's floor and belongs to Z1, 132.9 is below
+    /// the table entirely. Both are easy, by different routes through `isEasy`.
+    @Test func bothSidesOfZoneOnesFloorAreEasy() throws {
+        let runs = [
+            run("2026-08-04", km: 4, bpm: 132.9),
+            run("2026-08-06", km: 4, bpm: 133)
+        ]
+        let progress = blockProgress(plan: try plan(), runs: runs, asOf: date("2026-08-05"))
+        #expect(progress?.easyShare == 1)
+    }
+
     @Test func runsWithoutAHeartRateDoNotCountAsEasy() throws {
         // A run with no HR tells us nothing about effort; counting it as easy
         // would flatter the number the whole plan is judged on.

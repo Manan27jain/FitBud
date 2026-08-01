@@ -24,8 +24,22 @@ struct HistoricRun: Identifiable, Equatable, Sendable {
     }
 
     /// Whether this counts toward the plan's 80%-easy rule.
+    ///
+    /// `zone` is nil for two completely different reasons, and collapsing them
+    /// into "not easy" made the home screen tell the athlete the opposite of
+    /// the truth about the most compliant run he can produce:
+    ///
+    /// - **No heart rate at all.** Not easy, deliberately. An unmeasured run
+    ///   says nothing about effort and must not flatter the one number the
+    ///   whole plan is judged on.
+    /// - **A heart rate below Z1's 133 bpm floor** — a recovery jog averaging
+    ///   130. `HRZone.zone(for:)` is right to return nil there (a resting 62
+    ///   genuinely is not a training zone), but for *this* question it is
+    ///   emphatically easy: the 80% rule only asks whether the run stayed
+    ///   under the easy ceiling, and this is as far under it as running gets.
     var isEasy: Bool {
-        guard let zone else { return false }
+        guard let averageHeartRate else { return false }
+        guard let zone = HRZone.zone(for: averageHeartRate) else { return true }
         return zone.id == "Z1" || zone.id == "Z2"
     }
 }
