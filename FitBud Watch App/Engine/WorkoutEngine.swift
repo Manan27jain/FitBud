@@ -13,6 +13,14 @@ enum WorkoutEvent: Equatable, Sendable {
 /// Pure and deterministic: the same sequence of `LiveMetrics` always yields the
 /// same events, which is what makes it testable without a watch on a wrist.
 struct WorkoutEngine {
+    /// A recent pace needs at least this much span to mean anything — a
+    /// handful of GPS samples a couple of seconds apart is noise, not a pace.
+    static let recentPaceMinSpanSec: TimeInterval = 45
+    /// Samples older than this (relative to the newest one) are dropped, so
+    /// the window stays a genuinely *recent* pace rather than drifting toward
+    /// a second whole-run average.
+    static let recentPaceWindowCapSec: TimeInterval = 90
+
     private let timeline: SegmentTimeline
     private let runWalk: RunWalkCycler?
 
@@ -23,6 +31,10 @@ struct WorkoutEngine {
     private var lastElapsed: TimeInterval?
     private var heartRateSum: Double = 0
     private var heartRateCount: Int = 0
+
+    /// (elapsed, distanceMeters) pairs from run phases only — a walk break
+    /// would read as a catastrophic fade — cleared on every phase change.
+    private var recentPaceSamples: [(elapsed: TimeInterval, distanceMeters: Double)] = []
 
     private(set) var state = WorkoutState()
 
@@ -74,6 +86,22 @@ struct WorkoutEngine {
         } else {
             state.currentZone = nil
         }
+
+        // Rolling recent-pace window: run phases only, so a walk break can
+        // never read as a catastrophic fade. `phase` is nil for a session
+        // with no run/walk cycler at all, which counts as "always running"
+        // here — only an actual walk phase excludes a sample.
+        let phase = runWalk?.phase(at: metrics.elapsed)
+        if phase != lastPhase {
+            recentPaceSamples.removeAll()
+        }
+        if advancesTime && phase != .walk {
+            recentPaceSamples.append((elapsed: metrics.elapsed, distanceMeters: metrics.distanceMeters))
+            let cutoff = metrics.elapsed - Self.recentPaceWindowCapSec
+            recentPaceSamples.removeAll { $0.elapsed < cutoff }
+        }
+        state.recentPaceSecPerKm = Self.recentPace(from: recentPaceSamples)
+
         lastElapsed = metrics.elapsed
 
         var events: [WorkoutEvent] = []
@@ -86,16 +114,15 @@ struct WorkoutEngine {
         state.splits = splitDetector.splits
         events.append(contentsOf: splits.map(WorkoutEvent.splitCompleted))
 
-        if let runWalk {
-            let phase = runWalk.phase(at: metrics.elapsed)
+        if let runWalk, let phase {
             state.runWalkPhase = phase
             state.phaseRemaining = runWalk.remainingInPhase(at: metrics.elapsed)
             state.phaseRemainingFraction = runWalk.remainingFraction(at: metrics.elapsed)
             if phase != lastPhase {
                 if lastPhase != nil { events.append(.phaseChanged(phase)) }
-                lastPhase = phase
             }
         }
+        lastPhase = phase
 
         if let position = timeline.position(at: metrics.elapsed) {
             state.currentBlock = position.block
@@ -116,5 +143,19 @@ struct WorkoutEngine {
         }
 
         return events
+    }
+
+    /// Pace from the oldest and newest sample in the window, or `nil` when
+    /// the window doesn't yet span `recentPaceMinSpanSec` — a couple of
+    /// samples a few seconds apart isn't a pace, it's noise.
+    private static func recentPace(
+        from samples: [(elapsed: TimeInterval, distanceMeters: Double)]
+    ) -> Double? {
+        guard let oldest = samples.first, let newest = samples.last else { return nil }
+        let span = newest.elapsed - oldest.elapsed
+        guard span >= recentPaceMinSpanSec else { return nil }
+        let distanceKm = (newest.distanceMeters - oldest.distanceMeters) / 1000
+        guard distanceKm > 0 else { return nil }
+        return span / distanceKm
     }
 }

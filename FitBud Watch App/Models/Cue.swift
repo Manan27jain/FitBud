@@ -10,13 +10,18 @@ enum CueTrigger: Equatable, Sendable {
     case phaseStarted(RunWalkPhase)
     case halfway
     case finalKilometre
+    /// Recent pace slower than the session average by at least
+    /// `percentSlower`, sustained for `sustainedSec` — the athlete fading
+    /// under fatigue rather than a momentary GPS wobble.
+    case paceFading(percentSlower: Double, sustainedSec: TimeInterval)
 
-    /// Only drift warnings may interrupt. Everything else waits for a walk
-    /// break — a milestone delivered sixty seconds late is still a milestone,
-    /// but one delivered mid-interval is an annoyance.
+    /// Only drift warnings — and a struggle fade, which is the same shape of
+    /// warning — may interrupt. Everything else waits for a walk break: a
+    /// milestone delivered sixty seconds late is still a milestone, but
+    /// encouragement delivered half a lap late is not encouragement.
     var mayBeImmediate: Bool {
         switch self {
-        case .zoneAbove, .zoneBelow: true
+        case .zoneAbove, .zoneBelow, .paceFading: true
         default: false
         }
     }
@@ -24,7 +29,7 @@ enum CueTrigger: Equatable, Sendable {
 
 extension CueTrigger: Codable {
     private enum CodingKeys: String, CodingKey {
-        case kind, zone, sustainedSec, index, km, minutes, phase
+        case kind, zone, sustainedSec, index, km, minutes, phase, percentSlower
     }
 
     init(from decoder: Decoder) throws {
@@ -54,6 +59,11 @@ extension CueTrigger: Codable {
             self = .halfway
         case "finalKilometre":
             self = .finalKilometre
+        case "paceFading":
+            self = .paceFading(
+                percentSlower: try container.decode(Double.self, forKey: .percentSlower),
+                sustainedSec: try container.decodeIfPresent(TimeInterval.self, forKey: .sustainedSec) ?? 45
+            )
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .kind, in: container,
@@ -89,6 +99,10 @@ extension CueTrigger: Codable {
             try container.encode("halfway", forKey: .kind)
         case .finalKilometre:
             try container.encode("finalKilometre", forKey: .kind)
+        case let .paceFading(percentSlower, seconds):
+            try container.encode("paceFading", forKey: .kind)
+            try container.encode(percentSlower, forKey: .percentSlower)
+            try container.encode(seconds, forKey: .sustainedSec)
         }
     }
 }

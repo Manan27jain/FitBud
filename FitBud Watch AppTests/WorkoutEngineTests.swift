@@ -239,3 +239,69 @@ struct WorkoutEngineZoneTests {
         #expect(abs((engine.state.phaseRemainingFraction ?? 0) - 0.5) < 0.001)
     }
 }
+
+/// `recentPaceSecPerKm`: the rolling window that lets the coach see a fade.
+/// Spec section E5 — pure and deterministic, same as the rest of the engine.
+struct WorkoutEngineRecentPaceTests {
+    /// 4:1 run/walk, same shape as `WorkoutEngineTests.longRunEngine`.
+    private func longRunEngine() -> WorkoutEngine {
+        WorkoutEngine(
+            timeline: SegmentTimeline(segments: [.openEnded(zone: "Z2", label: "Long run")]),
+            runWalk: RunWalkCycler(runSeconds: 240, walkSeconds: 60)
+        )
+    }
+
+    @Test func isNilBeforeTheWindowSpansFortyFiveSeconds() {
+        var engine = longRunEngine()
+        _ = engine.ingest(LiveMetrics(elapsed: 0, distanceMeters: 0))
+        _ = engine.ingest(LiveMetrics(elapsed: 30, distanceMeters: 300))
+        #expect(engine.state.recentPaceSecPerKm == nil)
+    }
+
+    @Test func isCorrectOnceTheWindowSpansFortyFiveSeconds() {
+        var engine = longRunEngine()
+        _ = engine.ingest(LiveMetrics(elapsed: 0, distanceMeters: 0))
+        _ = engine.ingest(LiveMetrics(elapsed: 50, distanceMeters: 500))   // 50s / 0.5km
+        #expect(engine.state.recentPaceSecPerKm == 100)
+    }
+
+    /// The window clears on every phase change, so a walk break's near-zero
+    /// distance can never read as a catastrophic fade once running resumes.
+    @Test func isUnaffectedByAWalkBreak() {
+        var engine = longRunEngine()
+        // A run leg, then a walk break with a very different pace shape.
+        _ = engine.ingest(LiveMetrics(elapsed: 100, distanceMeters: 1000))
+        _ = engine.ingest(LiveMetrics(elapsed: 230, distanceMeters: 1300))
+        _ = engine.ingest(LiveMetrics(elapsed: 260, distanceMeters: 1301))   // walk starts at 240
+        _ = engine.ingest(LiveMetrics(elapsed: 290, distanceMeters: 1302))
+        // Running resumes at 300. A fresh window, unrelated to anything above.
+        _ = engine.ingest(LiveMetrics(elapsed: 300, distanceMeters: 1400))
+        _ = engine.ingest(LiveMetrics(elapsed: 350, distanceMeters: 1900))   // 50s / 0.5km
+        #expect(engine.state.recentPaceSecPerKm == 100)
+    }
+
+    /// The whole point of the window: it must show a slowdown the whole-run
+    /// average is still too diluted to reveal.
+    @Test func reflectsARecentSlowdownRatherThanTheWholeRunAverage() {
+        var engine = longRunEngine()
+        _ = engine.ingest(LiveMetrics(elapsed: 0, distanceMeters: 0))
+        _ = engine.ingest(LiveMetrics(elapsed: 150, distanceMeters: 1500))   // fast start: 100 sec/km
+        _ = engine.ingest(LiveMetrics(elapsed: 200, distanceMeters: 1750))   // last 50s: 200 sec/km
+        #expect(engine.state.recentPaceSecPerKm == 200)
+        let average = engine.state.averagePaceSecPerKm ?? 0
+        #expect(average < 150)   // still dragged toward the fast start
+        #expect((engine.state.recentPaceSecPerKm ?? 0) > average)
+    }
+
+    @Test func aSessionWithNoRunWalkCyclerTreatsEveryTickAsRunPhase() {
+        // No cycler configured means no walk phase ever exists, so the
+        // window simply accumulates like any other run-phase stretch.
+        var engine = WorkoutEngine(
+            timeline: SegmentTimeline(segments: [.openEnded(zone: "Z2", label: "Easy")]),
+            runWalk: nil
+        )
+        _ = engine.ingest(LiveMetrics(elapsed: 0, distanceMeters: 0))
+        _ = engine.ingest(LiveMetrics(elapsed: 50, distanceMeters: 500))
+        #expect(engine.state.recentPaceSecPerKm == 100)
+    }
+}

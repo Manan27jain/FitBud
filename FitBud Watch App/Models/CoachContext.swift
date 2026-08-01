@@ -66,12 +66,20 @@ struct LiveCoachContext: Equatable, Sendable {
     var currentZone: String?
     var currentHeartRate: Double?
     var walkBreakNumber: Int
+    /// Pace over the last minute or so, seconds per kilometre — set alongside
+    /// the whole-run pace implied by `elapsedSeconds`/`distanceKm` above, so
+    /// the model can see a fade rather than just a session average. Omitted
+    /// rather than zeroed when there isn't yet a window long enough to trust.
+    var recentPaceSecPerKm: Double?
 
     var promptSummary: String {
         var lines: [String] = []
         lines.append("\(formatDuration(elapsedSeconds)) elapsed, \(String(format: "%.2f", distanceKm))km covered.")
         if !splitPaces.isEmpty {
             lines.append("Splits so far: \(splitPaces.joined(separator: ", "))")
+        }
+        if let recentPaceSecPerKm, recentPaceSecPerKm > 0 {
+            lines.append("Recent pace (last minute or so): \(formatPace(recentPaceSecPerKm))/km.")
         }
         let zones = HRZone.table
             .compactMap { zone -> String? in

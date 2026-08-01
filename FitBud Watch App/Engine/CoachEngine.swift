@@ -138,6 +138,29 @@ struct CoachEngine {
 
         case .finalKilometre:
             return state.distanceKm >= max(targetDistanceKm - 1, 0)
+
+        case let .paceFading(percentSlower, sustained):
+            // Suppressed during a walk break, same reasoning as the zone
+            // triggers: pace is meant to fall there. And before 1km, GPS lock
+            // is still settling — a "fade" this early is measurement noise,
+            // not fatigue.
+            guard state.runWalkPhase != .walk, state.distanceKm >= 1 else {
+                driftStartedAt[rule.id] = nil
+                return false
+            }
+            guard let recent = state.recentPaceSecPerKm,
+                  let average = state.averagePaceSecPerKm, average > 0
+            else {
+                driftStartedAt[rule.id] = nil
+                return false
+            }
+            // A pace *number* rising means slowing.
+            let slowerBy = (recent - average) / average * 100
+            guard slowerBy >= percentSlower else {
+                driftStartedAt[rule.id] = nil
+                return false
+            }
+            return sustainedLongEnough(rule.id, since: state.elapsed, needed: sustained)
         }
     }
 

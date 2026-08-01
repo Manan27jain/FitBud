@@ -10,6 +10,13 @@ struct DemoAIProvider: AIProviding {
         SessionBrief(
             opening: "Easy today. Let the walk breaks do the work.",
             rules: [
+                // `DemoWorkoutRecorder.fadeWindow` is placed in the sweep's
+                // low-HR stretch, so this doesn't compete with `zoneAbove`
+                // for the single immediate-cue slot; listed first anyway as
+                // cheap insurance if that ever changes.
+                CueRule(trigger: .paceFading(percentSlower: 12, sustainedSec: 15),
+                        message: "Pace is fading. Relax your shoulders and hold on.",
+                        urgency: .immediate, repeats: true),
                 CueRule(trigger: .zoneAbove(ceiling: "Z2", sustainedSec: 20),
                         message: "Above easy. Ease off and let it settle.",
                         urgency: .immediate, repeats: true),

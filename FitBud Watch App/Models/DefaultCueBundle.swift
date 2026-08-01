@@ -22,7 +22,13 @@ func defaultBrief(targetZone: String, sessionTitle: String) -> SessionBrief {
         CueRule(trigger: .phaseStarted(.walk), message: "Walk break. Breathe.", repeats: true),
         CueRule(trigger: .splitCompleted(index: nil), message: "Another kilometre down.", repeats: true),
         CueRule(trigger: .halfway, message: "Halfway. Still feeling easy?"),
-        CueRule(trigger: .finalKilometre, message: "Last kilometre. Finish strong.")
+        CueRule(trigger: .finalKilometre, message: "Last kilometre. Finish strong."),
+        CueRule(
+            trigger: .paceFading(percentSlower: 12, sustainedSec: 45),
+            message: "Legs are heavy. Shorten your stride and keep going.",
+            urgency: .immediate,
+            repeats: true
+        )
     ]
     return SessionBrief(opening: opening, rules: rules)
 }

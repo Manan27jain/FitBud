@@ -25,6 +25,9 @@ struct OpenAIProvider: AIProviding {
     beyond a full stop or question mark, no emoji, no exclamation marks.
     The athlete's plan requires 80% of running easy; every run in their history was too hard.
     Your job is to keep them honest about that without nagging.
+    A paceFading trigger fires when their recent pace has slipped well behind their
+    session average — that is the athlete struggling, not drifting off plan, so answer
+    it with encouragement, not a warning.
     """
 
     func brief(context: CoachContext) async throws -> SessionBrief {
@@ -36,7 +39,8 @@ struct OpenAIProvider: AIProviding {
                 \(context.promptSummary)
 
                 Write the coaching for this session: one opening line, and 4 to 7 cue rules.
-                Only zoneAbove and zoneBelow rules may have urgency "immediate".
+                Include at least one paceFading rule so there is motivation ready if they fade.
+                Only zoneAbove, zoneBelow and paceFading rules may have urgency "immediate".
                 """]
             ],
             "response_format": [
@@ -56,7 +60,9 @@ struct OpenAIProvider: AIProviding {
                 ["role": "user", "content": """
                 \(context.promptSummary)
 
-                Say one thing to the athlete right now. At most 12 words. Plain text only.
+                If the splits show they are fading, respond with specific encouragement rather
+                than a status report. Say one thing to the athlete right now. At most 12 words.
+                Plain text only.
                 """]
             ]
         ]
@@ -175,14 +181,16 @@ struct OpenAIProvider: AIProviding {
                             "properties": [
                                 "kind": ["type": "string", "enum": [
                                     "zoneAbove", "zoneBelow", "splitCompleted", "distanceReached",
-                                    "elapsedReached", "phaseStarted", "halfway", "finalKilometre"
+                                    "elapsedReached", "phaseStarted", "halfway", "finalKilometre",
+                                    "paceFading"
                                 ]],
                                 "zone": ["type": "string"],
                                 "sustainedSec": ["type": "number"],
                                 "index": ["type": "integer"],
                                 "km": ["type": "number"],
                                 "minutes": ["type": "number"],
-                                "phase": ["type": "string", "enum": ["run", "walk"]]
+                                "phase": ["type": "string", "enum": ["run", "walk"]],
+                                "percentSlower": ["type": "number"]
                             ]
                         ],
                         "message": ["type": "string"],

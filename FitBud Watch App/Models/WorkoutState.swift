@@ -41,5 +41,12 @@ struct WorkoutState: Equatable, Sendable {
         return elapsed / (distanceMeters / 1000)
     }
 
+    /// Pace over a short rolling window of run-phase samples, seconds per
+    /// kilometre — what the athlete is doing *right now*, as opposed to
+    /// `averagePaceSecPerKm`'s whole-run figure. Set by `WorkoutEngine`, which
+    /// owns the sample window; `nil` until that window spans at least 45s, and
+    /// while the athlete is on a walk break.
+    var recentPaceSecPerKm: Double?
+
     var distanceKm: Double { distanceMeters / 1000 }
 }

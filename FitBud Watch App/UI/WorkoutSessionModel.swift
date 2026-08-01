@@ -289,7 +289,8 @@ final class WorkoutSessionModel {
             timeInZoneSeconds: state.timeInZone,
             currentZone: state.currentZone?.id,
             currentHeartRate: state.heartRate,
-            walkBreakNumber: breakNumber
+            walkBreakNumber: breakNumber,
+            recentPaceSecPerKm: state.recentPaceSecPerKm
         )
         liveCueTask?.cancel()
         liveCueTask = Task { [weak self] in

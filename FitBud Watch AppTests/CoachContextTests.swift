@@ -67,11 +67,42 @@ struct CoachContextTests {
             timeInZoneSeconds: ["Z1": 120, "Z2": 900, "Z3": 180],
             currentZone: "Z2",
             currentHeartRate: 156,
-            walkBreakNumber: 4
+            walkBreakNumber: 4,
+            recentPaceSecPerKm: nil
         )
         let text = live.promptSummary
         #expect(text.contains("9:20"))
         #expect(text.contains("Z2"))
         #expect(text.contains("3.2"))
+    }
+
+    @Test func liveSummaryCarriesTheRecentPaceWhenPresent() {
+        let live = LiveCoachContext(
+            elapsedSeconds: 1200,
+            distanceKm: 3.2,
+            splitPaces: [],
+            timeInZoneSeconds: [:],
+            currentZone: nil,
+            currentHeartRate: nil,
+            walkBreakNumber: 1,
+            recentPaceSecPerKm: 675
+        )
+        #expect(live.promptSummary.contains("11:15"))
+    }
+
+    @Test func liveSummaryOmitsRecentPaceRatherThanSendingZero() {
+        // A zero pace would read as standing still, or worse, as a
+        // divide-by-zero the model can't make sense of.
+        let live = LiveCoachContext(
+            elapsedSeconds: 1200,
+            distanceKm: 3.2,
+            splitPaces: [],
+            timeInZoneSeconds: [:],
+            currentZone: nil,
+            currentHeartRate: nil,
+            walkBreakNumber: 1,
+            recentPaceSecPerKm: nil
+        )
+        #expect(!live.promptSummary.contains("Recent pace"))
     }
 }

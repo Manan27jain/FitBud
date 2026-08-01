@@ -114,28 +114,55 @@ struct CueRuleDecodingTests {
           {"trigger":{"kind":"elapsedReached","minutes":20},"message":"Twenty minutes in.","urgency":"atNextBreak","repeats":false},
           {"trigger":{"kind":"phaseStarted","phase":"walk"},"message":"Walk break.","urgency":"atNextBreak","repeats":true},
           {"trigger":{"kind":"halfway"},"message":"Halfway.","urgency":"atNextBreak","repeats":false},
-          {"trigger":{"kind":"finalKilometre"},"message":"Last one.","urgency":"atNextBreak","repeats":false}
+          {"trigger":{"kind":"finalKilometre"},"message":"Last one.","urgency":"atNextBreak","repeats":false},
+          {"trigger":{"kind":"paceFading","percentSlower":12,"sustainedSec":45},"message":"Legs are heavy. Hold on.","urgency":"immediate","repeats":true}
         ]}
         """)
-        #expect(brief.rules.count == 8)
+        #expect(brief.rules.count == 9)
         #expect(brief.rules[1].trigger == .splitCompleted(index: nil))
         #expect(brief.rules[2].trigger == .splitCompleted(index: 3))
         #expect(brief.rules[5].trigger == .phaseStarted(.walk))
+        #expect(brief.rules[8].trigger == .paceFading(percentSlower: 12, sustainedSec: 45))
+    }
+
+    @Test func paceFadingRoundTripsThroughCodable() throws {
+        let original = CueTrigger.paceFading(percentSlower: 12, sustainedSec: 45)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(CueTrigger.self, from: data)
+        #expect(decoded == original)
+    }
+
+    @Test func paceFadingDefaultsItsSustainedSecondsWhenOmitted() throws {
+        let brief = try decode("""
+        {"opening":"Go","rules":[{"trigger":{"kind":"paceFading","percentSlower":15},
+         "message":"Hold your form together.","urgency":"atNextBreak","repeats":false}]}
+        """)
+        #expect(brief.rules[0].trigger == .paceFading(percentSlower: 15, sustainedSec: 45))
+    }
+
+    @Test func mayBeImmediateAllowsPaceFadingButRejectsAMilestoneTrigger() {
+        // Encouragement half a lap late is not encouragement — but a
+        // non-zone, non-pace trigger still has no business interrupting.
+        #expect(CueTrigger.paceFading(percentSlower: 12, sustainedSec: 45).mayBeImmediate)
+        #expect(!CueTrigger.halfway.mayBeImmediate)
     }
 }
 
 struct DefaultCueBundleTests {
-    @Test func buildsTheSixSpecifiedRules() {
+    @Test func buildsTheSevenSpecifiedRules() {
         let brief = defaultBrief(targetZone: "Z2", sessionTitle: "Easy run")
-        #expect(brief.rules.count == 6)
+        #expect(brief.rules.count == 7)
         #expect(brief.opening.isEmpty == false)
     }
 
-    @Test func theDriftWarningIsTheOnlyImmediateOne() {
+    @Test func theDriftAndFadeWarningsAreTheOnlyImmediateOnes() {
+        // Struggle coverage must survive offline: the fade rule earns
+        // `.immediate` for the same reason the drift warning does.
         let brief = defaultBrief(targetZone: "Z2", sessionTitle: "Easy run")
         let immediate = brief.rules.filter { $0.urgency == .immediate }
-        #expect(immediate.count == 1)
-        #expect(immediate[0].trigger == .zoneAbove(ceiling: "Z2", sustainedSec: 30))
+        #expect(immediate.count == 2)
+        #expect(immediate.contains { $0.trigger == .zoneAbove(ceiling: "Z2", sustainedSec: 30) })
+        #expect(immediate.contains { $0.trigger == .paceFading(percentSlower: 12, sustainedSec: 45) })
     }
 
     @Test func theCeilingFollowsTheSessionsTargetZone() {
@@ -151,6 +178,14 @@ struct DefaultCueBundleTests {
                 #expect(rule.message.split(whereSeparator: \.isWhitespace).count <= CueRule.maxWords)
             }
         }
+    }
+
+    @Test func theSeventhRuleIsTheFadeWarningAndWithinTheWordLimit() {
+        let brief = defaultBrief(targetZone: "Z2", sessionTitle: "Easy run")
+        let fade = brief.rules.last
+        #expect(fade?.trigger == .paceFading(percentSlower: 12, sustainedSec: 45))
+        #expect((fade?.message.split(whereSeparator: \.isWhitespace).count ?? .max) <= CueRule.maxWords)
+        #expect(fade?.repeats == true)
     }
 
     @Test func milestoneRulesFireOnlyOnce() {

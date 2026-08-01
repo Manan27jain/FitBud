@@ -7,7 +7,8 @@ struct CoachEngineTests {
         elapsed: TimeInterval,
         hr: Double? = nil,
         km: Double = 0,
-        phase: RunWalkPhase? = .run
+        phase: RunWalkPhase? = .run,
+        recentPace: Double? = nil
     ) -> WorkoutState {
         var s = WorkoutState()
         s.elapsed = elapsed
@@ -15,6 +16,7 @@ struct CoachEngineTests {
         s.currentZone = hr.flatMap(HRZone.zone(for:))
         s.distanceMeters = km * 1000
         s.runWalkPhase = phase
+        s.recentPaceSecPerKm = recentPace
         return s
     }
 
@@ -75,6 +77,53 @@ struct CoachEngineTests {
         var e = engine([CueRule(trigger: .phaseStarted(.walk), message: "Walk break.", repeats: true)])
         let cue = e.evaluate(state: state(elapsed: 300, phase: .walk), events: [.phaseChanged(.walk)])
         #expect(cue?.message == "Walk break.")
+    }
+
+    // MARK: paceFading — spec section E5
+
+    @Test func paceFadingFiresWhenRecentPaceIsSustainedlySlower() {
+        var e = engine([CueRule(trigger: .paceFading(percentSlower: 12, sustainedSec: 30),
+                                message: "Hold on.", urgency: .immediate, repeats: true)])
+        // avg 500 sec/km throughout; recent 570 is 14% slower — not yet sustained.
+        #expect(e.evaluate(state: state(elapsed: 1000, km: 2.0, phase: .run, recentPace: 570), events: []) == nil)
+        #expect(e.evaluate(state: state(elapsed: 1020, km: 2.04, phase: .run, recentPace: 570), events: []) == nil)
+        // 30s sustained: now it fires.
+        #expect(e.evaluate(state: state(elapsed: 1031, km: 2.062, phase: .run, recentPace: 570), events: [])?.message == "Hold on.")
+    }
+
+    @Test func paceFadingDoesNotFireBelowTheThreshold() {
+        var e = engine([CueRule(trigger: .paceFading(percentSlower: 12, sustainedSec: 0),
+                                message: "Hold on.", urgency: .immediate, repeats: true)])
+        // Only 5% slower than the 500 sec/km average — under the 12% bar.
+        #expect(e.evaluate(state: state(elapsed: 1000, km: 2.0, phase: .run, recentPace: 525), events: []) == nil)
+    }
+
+    @Test func paceFadingIsSuppressedDuringAWalkBreak() {
+        var e = engine([CueRule(trigger: .paceFading(percentSlower: 12, sustainedSec: 0),
+                                message: "Hold on.", urgency: .immediate, repeats: true)])
+        // 40% slower would easily qualify, but pace is meant to fall on a walk break.
+        #expect(e.evaluate(state: state(elapsed: 1000, km: 2.0, phase: .walk, recentPace: 700), events: []) == nil)
+    }
+
+    @Test func paceFadingDoesNotFireBeforeOneKilometre() {
+        var e = engine([CueRule(trigger: .paceFading(percentSlower: 12, sustainedSec: 0),
+                                message: "Hold on.", urgency: .immediate, repeats: true)])
+        // 0.9km covered — early GPS noise territory — even though the
+        // deviation itself would otherwise qualify.
+        #expect(e.evaluate(state: state(elapsed: 450, km: 0.9, phase: .run, recentPace: 570), events: []) == nil)
+    }
+
+    @Test func paceFadingDriftClockResetsWhenPaceRecovers() {
+        var e = engine([CueRule(trigger: .paceFading(percentSlower: 12, sustainedSec: 30),
+                                message: "Hold on.", urgency: .immediate, repeats: true)])
+        _ = e.evaluate(state: state(elapsed: 1000, km: 2.0, phase: .run, recentPace: 570), events: [])
+        // Back within 12% at 1020 — the clock restarts, same as zoneAbove.
+        _ = e.evaluate(state: state(elapsed: 1020, km: 2.04, phase: .run, recentPace: 510), events: [])
+        _ = e.evaluate(state: state(elapsed: 1025, km: 2.05, phase: .run, recentPace: 570), events: [])
+        // Only 6s since the clock restarted at 1025 — not yet sustained.
+        #expect(e.evaluate(state: state(elapsed: 1031, km: 2.062, phase: .run, recentPace: 570), events: []) == nil)
+        // But it does fire once 30s have genuinely elapsed since the restart.
+        #expect(e.evaluate(state: state(elapsed: 1056, km: 2.112, phase: .run, recentPace: 570), events: [])?.message == "Hold on.")
     }
 
     // MARK: Rate limiting — spec section 4
