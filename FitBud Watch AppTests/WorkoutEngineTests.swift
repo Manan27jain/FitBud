@@ -195,6 +195,41 @@ struct WorkoutEngineZoneTests {
         #expect(total <= engine.state.elapsed)
     }
 
+    /// The recorder ticks at 1 Hz whether or not the session is paused, but
+    /// `elapsed` excludes paused time — so a ten-minute pause re-reports the
+    /// same instant, and the same stale heart rate, about 600 times. Those
+    /// used to land in the running mean, dragging the average shown mid-run on
+    /// the Zones page toward whatever the athlete's heart was doing when they
+    /// stopped for a road crossing.
+    @Test func aPauseDoesNotPolluteTheAverageHeartRate() {
+        var engine = easyRunEngine()
+        _ = engine.ingest(LiveMetrics(elapsed: 0, heartRate: 150))
+        _ = engine.ingest(LiveMetrics(elapsed: 600, heartRate: 160))
+        #expect(engine.state.averageHeartRate == 155)
+        #expect(engine.state.timeInZone["Z2"] == 600)
+
+        for _ in 0..<600 {
+            _ = engine.ingest(LiveMetrics(elapsed: 600, heartRate: 160))
+        }
+
+        #expect(engine.state.averageHeartRate == 155)
+        // And no phantom zone time either — that guard was already right.
+        #expect(engine.state.timeInZone["Z2"] == 600)
+    }
+
+    /// The other half of the same fix: a paused athlete looking at the watch
+    /// must still see their *live* heart rate and zone. Only the average is
+    /// frozen.
+    @Test func aPausedSampleStillUpdatesTheLiveHeartRateAndZone() {
+        var engine = easyRunEngine()
+        _ = engine.ingest(LiveMetrics(elapsed: 600, heartRate: 185))   // Z4
+        _ = engine.ingest(LiveMetrics(elapsed: 600, heartRate: 140))   // recovering, Z1
+
+        #expect(engine.state.heartRate == 140)
+        #expect(engine.state.currentZone?.id == "Z1")
+        #expect(engine.state.averageHeartRate == 185)
+    }
+
     @Test func reportsRunningAverageHeartRateAndPhaseFraction() {
         var engine = easyRunEngine()
         _ = engine.ingest(LiveMetrics(elapsed: 0, heartRate: 150))

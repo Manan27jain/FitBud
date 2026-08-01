@@ -40,19 +40,37 @@ struct WorkoutEngine {
         state.heartRate = metrics.heartRate
         state.activeEnergyKcal = metrics.activeEnergyKcal
 
+        // Whether this sample is new information. The recorder ticks at 1 Hz
+        // whether or not the session is paused, but `elapsed` comes from the
+        // workout builder and excludes paused time — so during a pause the
+        // same instant is re-reported once a second, carrying a stale heart
+        // rate with it. The first sample of a workout has nothing to compare
+        // against and counts.
+        let advancesTime = lastElapsed.map { metrics.elapsed > $0 } ?? true
+
         // Attribute the interval since the previous sample to the zone the
         // athlete is in now. A sample with no heart rate is attributed to
         // nothing at all rather than being guessed at — a fabricated zone would
         // corrupt the one number the training plan is judged on.
         if let bpm = metrics.heartRate {
+            // `currentZone` and `state.heartRate` above update regardless: a
+            // paused athlete looking at the watch should still see their live
+            // heart rate. It is only the accumulators below that a repeated
+            // instant must not touch.
             let zone = HRZone.zone(for: bpm)
             state.currentZone = zone
-            if let zone, let last = lastElapsed, metrics.elapsed > last {
-                state.timeInZone[zone.id, default: 0] += metrics.elapsed - last
+            if advancesTime {
+                if let zone, let last = lastElapsed {
+                    state.timeInZone[zone.id, default: 0] += metrics.elapsed - last
+                }
+                // Outside this guard, a ten-minute pause folded ~600 copies of
+                // one stale reading into the average shown on the Zones page,
+                // dragging it toward whatever the athlete's heart happened to
+                // be doing when they stopped.
+                heartRateSum += bpm
+                heartRateCount += 1
+                state.averageHeartRate = heartRateSum / Double(heartRateCount)
             }
-            heartRateSum += bpm
-            heartRateCount += 1
-            state.averageHeartRate = heartRateSum / Double(heartRateCount)
         } else {
             state.currentZone = nil
         }
