@@ -86,3 +86,48 @@ struct LiveCoachContext: Equatable, Sendable {
         return lines.joined(separator: "\n")
     }
 }
+
+/// Assembles a `CoachContext` from the plan and whatever history is available.
+///
+/// Everything except the plan is optional: a context missing recovery data is
+/// still worth sending, and blocking a run's coaching on a HealthKit read that
+/// might be slow would defeat the point.
+enum CoachContextBuilder {
+    @MainActor
+    static func build(planDay: PlanDay?, runs: [HistoricRun] = [], asOf date: Date = Date()) -> CoachContext? {
+        guard let plan = try? PlanStore.loadBundled() else { return nil }
+        let progress = blockProgress(plan: plan, runs: runs, asOf: date)
+        let day = planDay ?? plan.day(on: date)
+
+        let zoneTable = HRZone.table
+            .map { "\($0.id) \($0.lowerBPM)-\($0.upperBPM)" }
+            .joined(separator: ", ")
+
+        let recent = runs.prefix(3).map { run in
+            let pace = run.paceSecPerKm.map { "\(formatPace($0))/km" } ?? "unknown pace"
+            let bpm = run.averageHeartRate.map { "avg \(Int($0))bpm" } ?? "no HR"
+            let zone = run.zone.map { " (\($0.id))" } ?? ""
+            return "\(TrainingPlan.dayKey(for: run.date)): \(String(format: "%.1f", run.distanceKm))km at \(pace), \(bpm)\(zone)"
+        }
+
+        return CoachContext(
+            sessionTitle: day?.title ?? "Run",
+            sessionNotes: day?.notes ?? "",
+            targetKm: day?.targetKm ?? 5,
+            targetZone: day?.zone ?? "Z2",
+            runWalk: day?.runWalk.map { "run \(Int($0.runMin))min / walk \(Int($0.walkMin))min" },
+            daysToRace: progress?.daysToRace ?? plan.daysToRace(from: date),
+            weekIndex: progress?.weekIndex ?? 0,
+            totalWeeks: progress?.totalWeeks ?? 8,
+            weekFocus: progress?.weekFocus ?? "",
+            weekCompletedKm: progress?.completedKm ?? 0,
+            weekPlannedKm: progress?.plannedKm ?? 0,
+            easyShare: progress?.easyShare,
+            recentRuns: Array(recent),
+            sleepHours: nil,
+            restingHeartRate: nil,
+            hrv: nil,
+            zoneTable: zoneTable
+        )
+    }
+}

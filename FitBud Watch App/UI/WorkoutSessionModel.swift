@@ -20,6 +20,10 @@ final class WorkoutSessionModel {
     /// the summary still needs this after the run has ended.
     private(set) var finishedTimeInZone: [String: TimeInterval] = [:]
 
+    private(set) var currentCue: Cue?
+    /// True once a brief — real or default — is loaded and cues can fire.
+    private(set) var coachIsReady = false
+
     private var recorder: WorkoutRecording
     /// The recorder this model was configured with — the real one in
     /// production, a test double under test. `startDemo()` swaps `recorder`
@@ -34,6 +38,18 @@ final class WorkoutSessionModel {
     private var isStarting = false
     private var isEnding = false
 
+    private var coachEngine: CoachEngine?
+    private var provider: (any AIProviding)?
+    private var speaker: (any CoachSpeaking)?
+    private var settings: CoachSettings?
+    private var liveCueTask: Task<Void, Never>?
+    private var lastServedBreak: Int?
+    private var dismissTask: Task<Void, Never>?
+    /// Incremented on each transition into a walk phase, so "one live call per
+    /// break" holds for any run/walk ratio.
+    private var walkBreakCounter = 0
+    private var lastCoachPhase: RunWalkPhase?
+
     // `recorder` can't default directly to `HealthKitWorkoutRecorder()`: default
     // argument expressions are type-checked outside the initializer's own
     // main-actor isolation, so a default value calling a `@MainActor`-isolated
@@ -45,6 +61,37 @@ final class WorkoutSessionModel {
         self.recorder = recorder
         self.configuredRecorder = recorder
         self.haptics = haptics
+    }
+
+    /// Injected once at app start. Kept separate from `init` so tests can
+    /// construct a model without a coach at all.
+    func configureCoach(provider: (any AIProviding)?, speaker: any CoachSpeaking, settings: CoachSettings) {
+        self.provider = provider
+        self.speaker = speaker
+        self.settings = settings
+    }
+
+    /// Shows a cue, buzzes, and speaks it when speech is on and something is
+    /// paired to hear it.
+    func present(_ cue: Cue) {
+        currentCue = cue
+        haptics.play(.splitCompleted)
+        if settings?.isSpeechEnabled == true {
+            speaker?.speak(cue.message)
+        }
+        dismissTask?.cancel()
+        dismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard !Task.isCancelled else { return }
+            self?.currentCue = nil
+        }
+    }
+
+    func dismissCue() {
+        dismissTask?.cancel()
+        dismissTask = nil
+        currentCue = nil
+        speaker?.stop()
     }
 
     func start(_ configuration: WorkoutConfiguration) async {
@@ -79,9 +126,33 @@ final class WorkoutSessionModel {
             let metrics = try await recorder.start(configuration)
             phase = .running
             pump(metrics)
+            loadBrief(for: configuration)
         } catch {
             engine = nil
             errorMessage = "Couldn't start: \(error.localizedDescription)"
+        }
+    }
+
+    /// Fetches the session brief in the background. The run has already
+    /// started by the time this is called — coaching is never on the critical
+    /// path, and a failure falls back to the default bundle rather than
+    /// leaving the athlete uncoached.
+    private func loadBrief(for configuration: WorkoutConfiguration) {
+        let planDay = (try? PlanStore.loadBundled())?.day(on: Date())
+        let fallback = defaultBrief(for: planDay)
+        let targetKm = planDay?.targetKm ?? 5
+
+        coachEngine = CoachEngine(brief: fallback, targetDistanceKm: targetKm)
+        coachIsReady = true
+
+        guard let provider, let context = CoachContextBuilder.build(planDay: planDay) else { return }
+        Task { [weak self] in
+            guard let brief = try? await provider.brief(context: context) else { return }
+            guard let self, self.phase == .running || self.phase == .paused else { return }
+            self.coachEngine = CoachEngine(brief: brief, targetDistanceKm: targetKm)
+            if !brief.opening.isEmpty {
+                self.present(Cue(id: UUID(), message: brief.opening, urgency: .atNextBreak, firedAt: 0))
+            }
         }
     }
 
@@ -125,6 +196,53 @@ final class WorkoutSessionModel {
         state = engine.state
         for event in events {
             haptics.play(haptic(for: event))
+        }
+        evaluateCoach(events: events)
+    }
+
+    private func evaluateCoach(events: [WorkoutEvent]) {
+        if let phase = state.runWalkPhase, phase != lastCoachPhase {
+            if phase == .walk { walkBreakCounter += 1 }
+            lastCoachPhase = phase
+        }
+        guard var coachEngine else { return }
+        if let cue = coachEngine.evaluate(state: state, events: events) {
+            present(cue)
+        } else if state.runWalkPhase == .walk, let cue = coachEngine.deliverQueued(at: state.elapsed) {
+            present(cue)
+        }
+        self.coachEngine = coachEngine
+        requestLiveCueIfAtNewWalkBreak()
+    }
+
+    /// Fires at most one live call per walk break. The athlete is easing off
+    /// for sixty seconds, the phone is in a pocket, and a two-second response
+    /// lands comfortably inside that window — which is the only reason a
+    /// network call is acceptable during a run at all.
+    private func requestLiveCueIfAtNewWalkBreak() {
+        guard state.runWalkPhase == .walk, let provider else { return }
+        // Counted by observing the transition into `.walk`, not derived from
+        // elapsed: the cycle length differs per session (4:1 through week 4,
+        // 5:1 from week 5), so any hardcoded divisor would fire at the wrong
+        // moments on half the plan.
+        guard lastServedBreak != walkBreakCounter else { return }
+        lastServedBreak = walkBreakCounter
+        let breakNumber = walkBreakCounter
+
+        let context = LiveCoachContext(
+            elapsedSeconds: state.elapsed,
+            distanceKm: state.distanceKm,
+            splitPaces: state.splits.map { formatPace($0.paceSecPerKm) },
+            timeInZoneSeconds: state.timeInZone,
+            currentZone: state.currentZone?.id,
+            currentHeartRate: state.heartRate,
+            walkBreakNumber: breakNumber
+        )
+        liveCueTask?.cancel()
+        liveCueTask = Task { [weak self] in
+            guard let message = try? await provider.liveCue(context: context), !message.isEmpty else { return }
+            guard let self, self.currentCue == nil, self.phase == .running else { return }
+            self.present(Cue(id: UUID(), message: message, urgency: .atNextBreak, firedAt: self.state.elapsed))
         }
     }
 
@@ -236,5 +354,15 @@ final class WorkoutSessionModel {
         finishedTimeInZone = [:]
         phase = .idle
         recorder = configuredRecorder
+        liveCueTask?.cancel()
+        liveCueTask = nil
+        dismissTask?.cancel()
+        dismissTask = nil
+        coachEngine = nil
+        currentCue = nil
+        coachIsReady = false
+        lastServedBreak = nil
+        walkBreakCounter = 0
+        lastCoachPhase = nil
     }
 }

@@ -172,3 +172,82 @@ struct CoachEngineTests {
         #expect(CoachEngine.minimumGap > longestWalkBreakSec)
     }
 }
+
+@MainActor
+struct CoachWiringTests {
+    /// Returns a brief immediately; records what it was asked for.
+    final class FakeProvider: AIProviding, @unchecked Sendable {
+        let id: ProviderID = .openAI
+        var briefToReturn: SessionBrief?
+        var briefError: (any Error)?
+        private(set) var briefCallCount = 0
+
+        func brief(context: CoachContext) async throws -> SessionBrief {
+            briefCallCount += 1
+            if let briefError { throw briefError }
+            return briefToReturn ?? SessionBrief(opening: "Go", rules: [])
+        }
+        func liveCue(context: LiveCoachContext) async throws -> String { "Keep going." }
+        func analyze(workout: CompletedWorkout, context: CoachContext) async throws -> WorkoutAnalysis {
+            WorkoutAnalysis(summary: "Good run.", takeaway: "Keep it easy.")
+        }
+    }
+
+    final class RecordingSpeaker: CoachSpeaking, @unchecked Sendable {
+        var canBeHeard = true
+        private(set) var spoken: [String] = []
+        func speak(_ text: String) { spoken.append(text) }
+        func stop() {}
+    }
+
+    @Test func aFailedBriefStillLeavesTheCoachWorking() async {
+        // The run must never be blocked or left silent by an AI failure.
+        let provider = FakeProvider()
+        provider.briefError = AIProvidingError.badResponse(500)
+        let model = WorkoutSessionModel(recorder: FakeWorkoutRecorder(), haptics: SilentHaptics())
+        model.configureCoach(provider: provider, speaker: RecordingSpeaker(), settings: CoachSettings())
+
+        await model.start(.openEasyRun)
+        // The default bundle is in place, so cues can still fire.
+        #expect(model.coachIsReady)
+    }
+
+    @Test func aCueIsSpokenOnlyWhenSpeechIsEnabled() {
+        let speaker = RecordingSpeaker()
+        let settings = CoachSettings()
+        settings.isSpeechEnabled = false
+        let model = WorkoutSessionModel(recorder: FakeWorkoutRecorder(), haptics: SilentHaptics())
+        model.configureCoach(provider: FakeProvider(), speaker: speaker, settings: settings)
+
+        model.present(Cue(id: UUID(), message: "Ease off.", urgency: .immediate, firedAt: 100))
+        #expect(model.currentCue?.message == "Ease off.")
+        #expect(speaker.spoken.isEmpty)
+
+        settings.isSpeechEnabled = true
+        model.present(Cue(id: UUID(), message: "Walk break.", urgency: .atNextBreak, firedAt: 200))
+        #expect(speaker.spoken == ["Walk break."])
+    }
+
+    @Test func dismissingClearsTheMessage() {
+        let model = WorkoutSessionModel(recorder: FakeWorkoutRecorder(), haptics: SilentHaptics())
+        model.configureCoach(provider: FakeProvider(), speaker: RecordingSpeaker(), settings: CoachSettings())
+        model.present(Cue(id: UUID(), message: "Halfway.", urgency: .atNextBreak, firedAt: 100))
+        #expect(model.currentCue != nil)
+        model.dismissCue()
+        #expect(model.currentCue == nil)
+    }
+
+    @Test func resetClearsCoachState() {
+        let model = WorkoutSessionModel(recorder: FakeWorkoutRecorder(), haptics: SilentHaptics())
+        model.configureCoach(provider: FakeProvider(), speaker: RecordingSpeaker(), settings: CoachSettings())
+        model.present(Cue(id: UUID(), message: "Halfway.", urgency: .atNextBreak, firedAt: 100))
+        model.reset()
+        #expect(model.currentCue == nil)
+        #expect(model.coachIsReady == false)
+    }
+}
+
+/// A haptic player that does nothing, for tests that are not about haptics.
+struct SilentHaptics: HapticPlaying {
+    func play(_ haptic: WorkoutHaptic) {}
+}

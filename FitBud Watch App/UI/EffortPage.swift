@@ -90,9 +90,16 @@ struct EffortPage: View {
             // rate ghosted its previous value every second and the zone name
             // dissolved through its old one. Digits must change crisply.
             .transaction { $0.animation = nil }
+
+            if let cue = model.currentCue {
+                CoachMessageView(message: cue.message) {
+                    model.dismissCue()
+                }
+            }
         }
         .containerBackground(Theme.pageWash(washTint), for: .tabView)
         .animation(.easeInOut(duration: 0.6), value: state.currentZone)
+        .animation(.easeInOut(duration: 0.25), value: model.currentCue)
         .navigationTitle("Effort")
     }
 }
