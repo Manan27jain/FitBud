@@ -31,6 +31,7 @@ final class WorkoutSessionModel {
     private let haptics: HapticPlaying
     private var engine: WorkoutEngine?
     private var pumpTask: Task<Void, Never>?
+    private var isStarting = false
     private var isEnding = false
 
     // `recorder` can't default directly to `HealthKitWorkoutRecorder()`: default
@@ -47,6 +48,20 @@ final class WorkoutSessionModel {
     }
 
     func start(_ configuration: WorkoutConfiguration) async {
+        // The same defect `end()` guards against, at the other end of the run.
+        // `recorder.start(_:)` suspends for 1–3s while `beginCollection` runs
+        // and `phase` stays `.idle` throughout, so the Start button is still
+        // live and a second tap re-enters here. The recorder's own `start`
+        // opens with `teardown()`, which nils its session; the second call
+        // then builds a fresh `HKWorkoutSession` and the first, resuming
+        // later, overwrites it with its own. One session is left orphaned
+        // with nothing able to end it — and watchOS permits only one active
+        // session, so the *next* start hangs forever. Wedged at the start
+        // line, which is the worst possible moment.
+        guard !isStarting else { return }
+        isStarting = true
+        defer { isStarting = false }
+
         // A previous attempt's error text and metrics must not bleed into this
         // workout: otherwise a failed start leaves "Couldn't start: …" on screen
         // for the whole of the successful run that follows it.

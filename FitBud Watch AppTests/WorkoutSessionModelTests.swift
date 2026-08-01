@@ -13,6 +13,9 @@ final class FakeWorkoutRecorder: WorkoutRecording {
     var pauseError: Error?
     /// Holds `end()` suspended, so a test can tap End again mid-save.
     var endDelay: Duration?
+    /// Holds `start()` suspended, so a test can tap Start again mid-launch —
+    /// the real `beginCollection` takes 1–3s to come back.
+    var startDelay: Duration?
     private(set) var startCount = 0
     private(set) var endCount = 0
     /// Set once `end()` has torn the session down, mirroring the real recorder:
@@ -23,6 +26,7 @@ final class FakeWorkoutRecorder: WorkoutRecording {
 
     func start(_ configuration: WorkoutConfiguration) async throws -> AsyncThrowingStream<LiveMetrics, Error> {
         startCount += 1
+        if let startDelay { try? await Task.sleep(for: startDelay) }
         continuation?.finish()
         continuation = nil
         if let startError {
@@ -242,6 +246,50 @@ struct WorkoutSessionModelTests {
         }
         // The recorder's saved totals, not the locally rebuilt fallback.
         #expect(workout.distanceMeters == 5_000)
+    }
+
+    /// The mirror image of `asecondEndTapCannotReplaceASavedSummaryWithAnError`,
+    /// at the start line. `recorder.start(_:)` suspends for 1–3s while
+    /// `beginCollection` runs and `phase` stays `.idle` throughout, so the
+    /// Start button never disables itself. A second tap used to re-enter,
+    /// build a second `HKWorkoutSession`, and orphan one of the two — after
+    /// which watchOS, which allows only one active session, hangs every
+    /// subsequent start.
+    @Test func aSecondStartTapIsIgnoredWhileTheFirstIsStillInFlight() async {
+        let (model, recorder, _) = makeModel()
+
+        recorder.startDelay = .milliseconds(200)
+        async let firstTap: Void = model.start(.openEasyRun)
+        await waitUntil { recorder.startCount == 1 }
+        await model.start(.openEasyRun)
+        await firstTap
+
+        // Exactly one session was ever asked for.
+        #expect(recorder.startCount == 1)
+        #expect(model.phase == .running)
+
+        // And the stream the model is pumping is that session's, not a
+        // second one's that nothing holds a reference to.
+        recorder.emit(LiveMetrics(elapsed: 30, distanceMeters: 100, heartRate: 150))
+        await waitUntil { model.state.distanceMeters == 100 }
+        #expect(model.state.elapsed == 30)
+    }
+
+    /// The guard must clear itself, or one slow start would disable the Start
+    /// button for the rest of the launch — including after a failed attempt,
+    /// which is exactly when the athlete needs to retry.
+    @Test func aFailedStartStillAllowsARetry() async {
+        let (model, recorder, _) = makeModel()
+
+        recorder.startDelay = .milliseconds(50)
+        recorder.startError = WorkoutRecordingError.healthDataUnavailable
+        await model.start(.openEasyRun)
+        #expect(model.phase == .idle)
+
+        recorder.startError = nil
+        await model.start(.openEasyRun)
+        #expect(model.phase == .running)
+        #expect(recorder.startCount == 2)
     }
 
     @Test func eventsFromTheEngineReachTheHaptics() async {
