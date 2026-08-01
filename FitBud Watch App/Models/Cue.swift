@@ -162,6 +162,37 @@ struct SessionBrief: Equatable, Sendable, Decodable {
     /// Spoken and shown as the run begins.
     let opening: String
     let rules: [CueRule]
+
+    init(opening: String, rules: [CueRule]) {
+        self.opening = opening
+        self.rules = rules
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case opening, rules
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        opening = try container.decode(String.self, forKey: .opening)
+        rules = try container.decode([CueRule].self, forKey: .rules)
+
+        // The same guard `CueRule.message` gets, and for the same reason:
+        // `CoachMessageView` shrinks an over-length line rather than
+        // truncating it, but only up to a point, and twelve words is what
+        // actually fits three lines at 20pt on a 46mm screen. Nothing at the
+        // schema level bounds `opening` the way `CueRule`'s decoding bounds
+        // `message` — the system prompt only *asks* the model to keep every
+        // message to twelve words — so an opening this long must be rejected
+        // here rather than reach the screen and truncate mid-sentence.
+        let words = opening.split(whereSeparator: \.isWhitespace).count
+        guard words <= CueRule.maxWords else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .opening, in: container,
+                debugDescription: "Opening line is \(words) words; the limit is \(CueRule.maxWords)"
+            )
+        }
+    }
 }
 
 struct WorkoutAnalysis: Equatable, Sendable, Decodable {

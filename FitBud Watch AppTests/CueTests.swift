@@ -68,6 +68,23 @@ struct CueRuleDecodingTests {
         }
     }
 
+    @Test func rejectsAnOpeningLongerThanTwelveWords() {
+        // `CoachMessageView` shrinks an over-length line rather than
+        // truncating it, but only up to a point: twelve words is what
+        // actually fits three lines at 20pt on a 46mm screen. Unlike
+        // `rules[].message`, nothing enforces that limit on `opening` at the
+        // model level, and the system prompt only *asks* the model to keep
+        // every message to twelve words — a model that ignores that for the
+        // opening line specifically must not reach the screen and truncate
+        // with an ellipsis mid-run.
+        #expect(throws: (any Error).self) {
+            try decode("""
+            {"opening":"one two three four five six seven eight nine ten eleven twelve thirteen",
+             "rules":[]}
+            """)
+        }
+    }
+
     @Test func rejectsImmediateUrgencyOnANonZoneTrigger() {
         // Only drift warnings earn the right to interrupt a hard interval.
         #expect(throws: (any Error).self) {
