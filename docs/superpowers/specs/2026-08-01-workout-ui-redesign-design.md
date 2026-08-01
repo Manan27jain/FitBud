@@ -218,3 +218,46 @@ injected fake HR series, not only against a live workout.
 2. **Whether the Effort page should replace the Zones page.** They overlap. Both are specified
    because it is unclear which will prove more useful on the wrist; after two weeks of running,
    one may simply be deleted.
+
+---
+
+## 11. Residual items carried out of the redesign
+
+Shipped with 125 passing tests and a clean final review. These are known and deliberately not
+fixed, recorded here because they outlive the scratch workspace.
+
+**Only a real wrist can settle these** — see `docs/DEVICE-CHECKLIST.md`:
+heart rate reaching the ring, split haptics at each kilometre, run/walk haptics at interval
+boundaries, block haptics during a structured session, always-on dimmed legibility, and the
+workout appearing correctly in Apple Fitness. The simulator has no sensors and will not render
+the dimmed always-on state, so every contrast figure in review was arithmetic, not observation.
+
+**Accepted, with reasoning:**
+
+1. **`.secondary` captions measure ~3.1:1 against the page wash under a 40% dim model.** They
+   are short uppercase glosses beside numerals that read at 9:1. Re-deciding `.secondary`
+   app-wide was out of scope; worth a look on the wrist.
+2. **`.caption2` scales with Dynamic Type**, and one notch above default would overflow the
+   Zones page, which has ~17pt of slack. The spec mandates `.caption2` and the hardcoded 9pt it
+   replaced was the actual defect. `Theme.elapsedFont` is the single knob if it ever bites.
+3. **`SummaryView` does not inherit `.fontDesign(.rounded)`** — it is a sibling of
+   `LiveWorkoutView` in `RootView`'s switch, not a child — and still carries three hardcoded
+   11pt legend captions and a 26pt clock outside `Theme.elapsedFont`. The five *live* pages are
+   fully unified; the summary is one surface behind.
+4. **`WorkoutHistoryReading` declares `async throws` but never throws** — the query discards its
+   error and resumes with `[]`, so a genuine failure is indistinguishable from "no runs". Either
+   drop `throws` or propagate it.
+5. **`completedSessions` is uncapped**, so two runs in one day render "2/1" on the week card.
+6. **`startDemo()` swaps the recorder outside the `isStarting` guard.** DEBUG-only,
+   sub-millisecond window, not on the athlete's path.
+7. **Structured-session block state is computed but never displayed.** `blockRemaining` and
+   `currentBlockIndex` have no readers, so on an interval day the athlete gets a haptic at each
+   block boundary with nothing on screen naming the block or its remaining time. First plan day
+   that needs it is the week-3 tempo session on 17 August.
+
+**Test coverage note.** 125 tests, but roughly half sit on pure functions with no surviving
+failure mode. The highest-value additions, in order: `pause()`/`resume()` transitions (the word
+appears once in the suite, and only to make pause fail); `finishedTimeInZone` after a
+*successful* `end()` (only the two failure paths are asserted); and a
+`PlanDay → WorkoutConfiguration → SegmentTimeline → WorkoutEngine` sweep over the real strides
+day, the only place run/walk and structured blocks coexist.
