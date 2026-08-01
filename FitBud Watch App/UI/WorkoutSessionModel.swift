@@ -45,6 +45,17 @@ final class WorkoutSessionModel {
     private var liveCueTask: Task<Void, Never>?
     private var lastServedBreak: Int?
     private var dismissTask: Task<Void, Never>?
+    private var briefTask: Task<Void, Never>?
+    /// Bumped on every successful `start(_:)`. Captured by `loadBrief`'s
+    /// background task so a brief fetched for an earlier workout can tell,
+    /// on resume, that it no longer belongs — `phase == .running` alone
+    /// can't distinguish "still my workout" from "a different workout that
+    /// also happens to be running."
+    private var workoutGeneration = 0
+    /// Elapsed time (in the current workout) at which the last cue was
+    /// shown. Lets the brief's opening line defer to the rate limit instead
+    /// of bypassing it.
+    private var lastPresentedAt: TimeInterval?
     /// Incremented on each transition into a walk phase, so "one live call per
     /// break" holds for any run/walk ratio.
     private var walkBreakCounter = 0
@@ -75,6 +86,7 @@ final class WorkoutSessionModel {
     /// paired to hear it.
     func present(_ cue: Cue) {
         currentCue = cue
+        lastPresentedAt = state.elapsed
         haptics.play(.splitCompleted)
         if settings?.isSpeechEnabled == true {
             speaker?.speak(cue.message)
@@ -125,6 +137,7 @@ final class WorkoutSessionModel {
             // hand a finished stream to the next one.
             let metrics = try await recorder.start(configuration)
             phase = .running
+            workoutGeneration += 1
             pump(metrics)
             loadBrief(for: configuration)
         } catch {
@@ -138,6 +151,10 @@ final class WorkoutSessionModel {
     /// path, and a failure falls back to the default bundle rather than
     /// leaving the athlete uncoached.
     private func loadBrief(for configuration: WorkoutConfiguration) {
+        // Any brief still in flight belonged to a workout `reset()` has since
+        // torn down; it must not go on to install itself into this one.
+        briefTask?.cancel()
+
         let planDay = (try? PlanStore.loadBundled())?.day(on: Date())
         let fallback = defaultBrief(for: planDay)
         let targetKm = planDay?.targetKm ?? 5
@@ -146,11 +163,29 @@ final class WorkoutSessionModel {
         coachIsReady = true
 
         guard let provider, let context = CoachContextBuilder.build(planDay: planDay) else { return }
-        Task { [weak self] in
+        let generation = workoutGeneration
+        briefTask = Task { [weak self] in
             guard let brief = try? await provider.brief(context: context) else { return }
-            guard let self, self.phase == .running || self.phase == .paused else { return }
+            // `reset()` cancels this task, but cancellation of the `await`
+            // above isn't guaranteed to interrupt a real network call
+            // promptly. The generation check is what actually holds: a brief
+            // whose workout has since ended and been replaced by a new one —
+            // which `phase == .running` alone can't tell apart, since the
+            // new workout is running too — is rejected here regardless of
+            // whether the `Task` itself was ever torn down in time.
+            guard let self, self.workoutGeneration == generation,
+                  self.phase == .running || self.phase == .paused else { return }
             self.coachEngine = CoachEngine(brief: brief, targetDistanceKm: targetKm)
-            if !brief.opening.isEmpty {
+            // A fresh `CoachEngine` starts with no `lastDeliveredAt`, so
+            // presenting the opening unconditionally would skip the rate
+            // limit it exists to enforce. If a cue already landed inside the
+            // floor — an immediate drift warning from the default bundle is
+            // the realistic case — the opening is no longer a "starting now"
+            // message; skip it rather than double up.
+            let recentlyPresented = self.lastPresentedAt.map {
+                self.state.elapsed - $0 < CoachEngine.urgentFloor
+            } ?? false
+            if !brief.opening.isEmpty, !recentlyPresented {
                 self.present(Cue(id: UUID(), message: brief.opening, urgency: .atNextBreak, firedAt: 0))
             }
         }
@@ -358,10 +393,13 @@ final class WorkoutSessionModel {
         liveCueTask = nil
         dismissTask?.cancel()
         dismissTask = nil
+        briefTask?.cancel()
+        briefTask = nil
         coachEngine = nil
         currentCue = nil
         coachIsReady = false
         lastServedBreak = nil
+        lastPresentedAt = nil
         walkBreakCounter = 0
         lastCoachPhase = nil
     }

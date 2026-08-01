@@ -180,10 +180,14 @@ struct CoachWiringTests {
         let id: ProviderID = .openAI
         var briefToReturn: SessionBrief?
         var briefError: (any Error)?
+        /// Mimics a real network round trip, the way `FakeWorkoutRecorder`'s
+        /// `startDelay` mimics `beginCollection`'s.
+        var briefDelay: Duration?
         private(set) var briefCallCount = 0
 
         func brief(context: CoachContext) async throws -> SessionBrief {
             briefCallCount += 1
+            if let briefDelay { try? await Task.sleep(for: briefDelay) }
             if let briefError { throw briefError }
             return briefToReturn ?? SessionBrief(opening: "Go", rules: [])
         }
@@ -244,6 +248,48 @@ struct CoachWiringTests {
         model.reset()
         #expect(model.currentCue == nil)
         #expect(model.coachIsReady == false)
+    }
+
+    /// Regression test: a slow brief used to install itself and speak its
+    /// opening into whatever workout happened to be running when it finally
+    /// landed, because the only guard was `phase == .running`, and a second
+    /// workout satisfies that just as well as the first one did.
+    @Test func aBriefThatArrivesAfterResetDoesNotInstallIntoTheNextWorkout() async {
+        let provider = FakeProvider()
+        provider.briefDelay = .milliseconds(100)
+        provider.briefToReturn = SessionBrief(opening: "Stale opening.", rules: [])
+        let model = WorkoutSessionModel(recorder: FakeWorkoutRecorder(), haptics: SilentHaptics())
+        model.configureCoach(provider: provider, speaker: RecordingSpeaker(), settings: CoachSettings())
+
+        await model.start(.openEasyRun)
+        model.reset()
+        // The second workout has no provider of its own, so the only brief
+        // that could possibly land during its lifetime is the first
+        // workout's late one — which must be rejected.
+        model.configureCoach(provider: nil, speaker: RecordingSpeaker(), settings: CoachSettings())
+        await model.start(.openEasyRun)
+
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(model.currentCue == nil)
+    }
+
+    /// Regression test: swapping in the real brief resets the engine's rate
+    /// limiter, and the opening line was presented directly rather than
+    /// through `evaluate`, so it bypassed the limiter entirely. A cue that
+    /// fired moments before the brief lands must suppress the opening rather
+    /// than doubling up inside the 45s floor.
+    @Test func theOpeningLineIsSuppressedWhenACueFiredWithinTheFloor() async {
+        let provider = FakeProvider()
+        provider.briefDelay = .milliseconds(50)
+        provider.briefToReturn = SessionBrief(opening: "Fresh opening.", rules: [])
+        let model = WorkoutSessionModel(recorder: FakeWorkoutRecorder(), haptics: SilentHaptics())
+        model.configureCoach(provider: provider, speaker: RecordingSpeaker(), settings: CoachSettings())
+
+        await model.start(.openEasyRun)
+        model.present(Cue(id: UUID(), message: "Ease off.", urgency: .immediate, firedAt: 0))
+
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(model.currentCue?.message == "Ease off.")
     }
 }
 
