@@ -41,6 +41,14 @@ final class WorkoutSessionModel {
 
     private var coachEngine: CoachEngine?
     private var provider: (any AIProviding)?
+    /// The provider this model was configured with — the real one (or `nil`
+    /// with no key configured) in production. `startDemo()` swaps `provider`
+    /// for `DemoAIProvider` so a demo run never spends a real API call even
+    /// when a key is configured; `reset()` restores it from here for the same
+    /// reason `configuredRecorder` exists — so a debug demo run can't leave
+    /// every later *real* session on the fake provider for the rest of the
+    /// launch. A no-op wherever `provider` was never swapped away from this.
+    private var configuredProvider: (any AIProviding)?
     private var speaker: (any CoachSpeaking)?
     private var settings: CoachSettings?
     private var liveCueTask: Task<Void, Never>?
@@ -80,6 +88,7 @@ final class WorkoutSessionModel {
     /// construct a model without a coach at all.
     func configureCoach(provider: (any AIProviding)?, speaker: any CoachSpeaking, settings: CoachSettings) {
         self.provider = provider
+        self.configuredProvider = provider
         self.speaker = speaker
         self.settings = settings
     }
@@ -196,8 +205,15 @@ final class WorkoutSessionModel {
 #if DEBUG
     /// Starts a scripted workout against `DemoWorkoutRecorder` so the UI can be
     /// seen on a simulator, which has no heart-rate sensor. Debug builds only.
+    ///
+    /// Also swaps in `DemoAIProvider`, mirroring the recorder swap above: a
+    /// real key may well be configured on the machine running this, and
+    /// without the swap `provider` would still be the live `OpenAIProvider`,
+    /// so every demo run would silently spend real API calls. `reset()`
+    /// restores both from their configured originals.
     func startDemo() async {
         recorder = DemoWorkoutRecorder()
+        provider = DemoAIProvider()
         await start(.longRun5to1)
     }
 #endif
@@ -413,6 +429,7 @@ final class WorkoutSessionModel {
         analysis = nil
         phase = .idle
         recorder = configuredRecorder
+        provider = configuredProvider
         liveCueTask?.cancel()
         liveCueTask = nil
         dismissTask?.cancel()
