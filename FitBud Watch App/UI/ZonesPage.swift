@@ -39,6 +39,7 @@ struct ZonesPage: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 8)
+        .containerBackground(Theme.pageWash(Theme.zonesTint), for: .tabView)
         .navigationTitle("Zones")
     }
 

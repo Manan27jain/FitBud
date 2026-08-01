@@ -56,6 +56,52 @@ enum Theme {
     static let scaleWidth: CGFloat = 5
     /// Gap between the draining phase ring and the zone scale outside it.
     static let ringToScaleGap: CGFloat = 4
+
+    // MARK: Page washes (spec §3)
+
+    /// A page's meaning tint, washed from the top down to pure black.
+    ///
+    /// Deliberately weak. Spec §5 wants left-aligned type on a black
+    /// background with the zone scale as the only chrome, and the Series 10
+    /// dims rather than sleeps during a workout — so the tint has to survive
+    /// being halved without ever eating the contrast of the numerals sitting
+    /// on top of it. At 0.28 over black even the brightest zone hue
+    /// composites to roughly 5% luminance, which leaves white type at better
+    /// than 11:1. A hint that the page has changed, not a flood of colour.
+    static func pageWash(_ tint: Color) -> LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: tint.opacity(0.28), location: 0),
+                .init(color: tint.opacity(0.05), location: 0.45),
+                .init(color: .black, location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// Static tints for the four pages whose meaning does not move.
+    ///
+    /// All four are chosen from *outside* the zone palette on purpose. The
+    /// Effort page's wash is the one that carries a reading — it follows the
+    /// live zone, so the whole screen warms as the athlete drifts out of Z2 —
+    /// and that signal only works if a coloured background nowhere else in
+    /// the app can be mistaken for a zone.
+    static let controlsTint = Color(white: 0.5)
+    static let zonesTint = Color(red: 0.369, green: 0.361, blue: 0.902)   // #5E5CE6 indigo
+    /// The page the yellow clock leads, so it is washed in the clock's own
+    /// hue. Not a zone colour, and the only warm one of the four.
+    ///
+    /// Dialled back because yellow is far more luminous than indigo, purple or
+    /// grey at the same opacity: at the full 0.28 the wash weighed noticeably
+    /// more than the other three pages' and, worse, put the yellow clock on a
+    /// yellow ground where it lost its punch. This is a perceptual correction,
+    /// not a different design.
+    static let metricsTint = elapsedYellow.opacity(0.55)
+    static let splitsTint = Color(red: 0.749, green: 0.353, blue: 0.949)  // #BF5AF2 purple
+    /// The Effort page with no heart rate at all — no zone to report, so no
+    /// colour to report it in.
+    static let noSignalTint = Color(white: 0.32)
 }
 
 /// The uppercase caption that sits to the right of a number — spec §5's

@@ -57,6 +57,7 @@ struct SplitsPage: View {
             }
             .padding(.horizontal, 8)
         }
+        .containerBackground(Theme.pageWash(Theme.splitsTint), for: .tabView)
         .navigationTitle("Splits")
     }
 

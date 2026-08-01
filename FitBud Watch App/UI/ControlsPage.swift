@@ -37,6 +37,7 @@ struct ControlsPage: View {
             .tint(.red)
         }
         .padding(.horizontal, 8)
+        .containerBackground(Theme.pageWash(Theme.controlsTint), for: .tabView)
         .navigationTitle("Controls")
     }
 }
