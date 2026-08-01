@@ -89,7 +89,11 @@ struct OpenAIProvider: AIProviding {
         ]
         let data = try await post(body)
         let content = try Self.extractContent(from: data)
-        return try JSONDecoder().decode(WorkoutAnalysis.self, from: Data(content.utf8))
+        do {
+            return try JSONDecoder().decode(WorkoutAnalysis.self, from: Data(content.utf8))
+        } catch {
+            throw AIProvidingError.undecodable(error.localizedDescription)
+        }
     }
 
     // MARK: Transport
@@ -125,7 +129,12 @@ struct OpenAIProvider: AIProviding {
     }
 
     static func extractContent(from data: Data) throws -> String {
-        let response = try JSONDecoder().decode(ChatResponse.self, from: data)
+        let response: ChatResponse
+        do {
+            response = try JSONDecoder().decode(ChatResponse.self, from: data)
+        } catch {
+            throw AIProvidingError.undecodable(error.localizedDescription)
+        }
         guard let content = response.choices.first?.message.content else {
             throw AIProvidingError.undecodable("no choices in response")
         }
