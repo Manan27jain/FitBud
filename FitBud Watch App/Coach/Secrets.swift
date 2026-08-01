@@ -22,17 +22,17 @@ enum Secrets {
         return dictionary
     }()
 
-    /// `nil` rather than empty string when absent, so callers can use `if let`
-    /// and an unconfigured app cleanly disables AI instead of sending a request
-    /// with an empty bearer token.
-    private static func value(_ key: String) -> String? {
+    /// Normalises a raw plist dictionary: absent, empty and whitespace-only
+    /// values all read as "not configured", so an unconfigured app disables AI
+    /// cleanly instead of sending an empty bearer token.
+    static func normalise(_ values: [String: String], key: String) -> String? {
         guard let value = values[key], !value.trimmingCharacters(in: .whitespaces).isEmpty else {
             return nil
         }
         return value
     }
 
-    static var openAIKey: String? { value("OPENAI_API_KEY") }
-    static var geminiKey: String? { value("GEMINI_API_KEY") }
+    static var openAIKey: String? { normalise(values, key: "OPENAI_API_KEY") }
+    static var geminiKey: String? { normalise(values, key: "GEMINI_API_KEY") }
     static var hasAnyKey: Bool { openAIKey != nil || geminiKey != nil }
 }

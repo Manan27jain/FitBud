@@ -3,13 +3,38 @@ import Testing
 @testable import FitBud_Watch_App
 
 struct SecretsTests {
-    @Test func missingOrEmptyKeysReadAsNil() {
-        // No Secrets.plist is bundled in a test run, and an all-empty example
-        // must not read as "configured" — otherwise the app would try to
-        // authenticate with an empty bearer token and fail confusingly.
-        #expect(Secrets.openAIKey == nil)
-        #expect(Secrets.geminiKey == nil)
-        #expect(Secrets.hasAnyKey == false)
+    @Test func normaliseMissingKeyReturnsNil() {
+        let values: [String: String] = [:]
+        let result = Secrets.normalise(values, key: "NONEXISTENT")
+        #expect(result == nil)
+    }
+
+    @Test func normaliseEmptyStringReturnsNil() {
+        let values: [String: String] = ["KEY": ""]
+        let result = Secrets.normalise(values, key: "KEY")
+        #expect(result == nil)
+    }
+
+    @Test func normaliseWhitespaceOnlyReturnsNil() {
+        let whitespace = String(repeating: " ", count: 10)
+        let values: [String: String] = ["KEY": whitespace]
+        let result = Secrets.normalise(values, key: "KEY")
+        #expect(result == nil)
+    }
+
+    @Test func normaliseRealValueReturnsValue() {
+        let values: [String: String] = ["KEY": "test-key-value"]
+        let result = Secrets.normalise(values, key: "KEY")
+        #expect(result == "test-key-value")
+    }
+
+    @Test func hasAnyKeyInvariant() {
+        // Verify that hasAnyKey accurately reflects whether any key is configured.
+        // Do not assert on actual key values to avoid leaking them on test failure.
+        let hasOpenAI = Secrets.openAIKey != nil
+        let hasGemini = Secrets.geminiKey != nil
+        let expected = hasOpenAI || hasGemini
+        #expect(Secrets.hasAnyKey == expected)
     }
 }
 
