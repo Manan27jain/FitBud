@@ -91,7 +91,7 @@ final class WorkoutSessionModel {
                 // of leaving the live screen frozen on its last values.
                 guard let self else { return }
                 self.errorMessage = "Workout session failed: \(error.localizedDescription)"
-                self.phase = .finished(self.unsavedWorkout())
+                self.finish(self.unsavedWorkout())
             }
         }
     }
@@ -150,7 +150,6 @@ final class WorkoutSessionModel {
         pumpTask = nil
 
         let splits = state.splits
-        finishedTimeInZone = state.timeInZone
         do {
             let workout = try await recorder.end(splits: splits)
             // A stale message from an earlier pause/resume failure (or a
@@ -159,7 +158,7 @@ final class WorkoutSessionModel {
             // `SummaryView` treats any non-nil `errorMessage` as "this run
             // wasn't saved".
             errorMessage = nil
-            phase = .finished(workout)
+            finish(workout)
         } catch {
             // Losing the HealthKit save is bad; being trapped on a frozen live
             // screen after a two-hour run is worse. The recorder has already
@@ -168,8 +167,21 @@ final class WorkoutSessionModel {
             // plainly that it wasn't saved. The athlete can read their run and
             // leave.
             errorMessage = "Couldn't save to Health: \(error.localizedDescription)"
-            phase = .finished(unsavedWorkout())
+            finish(unsavedWorkout())
         }
+    }
+
+    /// The one door into `.finished`, used by a successful `end()`, a failed
+    /// `end()`, and `pump()`'s catch block (the session dying on its own).
+    /// Three call sites used to each assign `finishedTimeInZone` themselves;
+    /// one of them — the session-failure path — didn't, so an athlete whose
+    /// watch dropped the session mid-run got a summary with an empty zone
+    /// breakdown despite `state.timeInZone` being full of real data. Funneling
+    /// every route through here means there is exactly one place responsible
+    /// for capturing it, not three to keep in sync.
+    private func finish(_ workout: CompletedWorkout) {
+        finishedTimeInZone = state.timeInZone
+        phase = .finished(workout)
     }
 
     /// Reconstructs a summary from live state when HealthKit refuses to hand one

@@ -304,4 +304,53 @@ struct WorkoutSessionModelTests {
         #expect(workout.duration == 300)
         #expect(recorder.endCount == 0)
     }
+
+    /// Critical regression: the session-failure path used to reach
+    /// `.finished` via `phase = .finished(unsavedWorkout())` directly, never
+    /// touching `finishedTimeInZone` — which `reset()` had already zeroed
+    /// before this run started. The zone bar this whole task exists for would
+    /// silently vanish for exactly the athletes who need it: someone whose
+    /// watch drops the session an hour into a long run.
+    @Test func zoneTimeSurvivesASessionFailure() async {
+        let (model, recorder, _) = makeModel()
+        await model.start(.openEasyRun)
+        // Two samples 60s apart, both in Z1 (133..<148 bpm), so the engine has
+        // a prior `elapsed` to measure the interval against.
+        recorder.emit(LiveMetrics(elapsed: 300, distanceMeters: 900, heartRate: 140))
+        await waitUntil { model.state.distanceMeters == 900 }
+        recorder.emit(LiveMetrics(elapsed: 360, distanceMeters: 1_000, heartRate: 140))
+        await waitUntil { model.state.timeInZone["Z1"] == 60 }
+
+        recorder.failSession(WorkoutRecordingError.sessionFailed(URLError(.networkConnectionLost)))
+        await waitUntil {
+            if case .finished = model.phase { return true }
+            return false
+        }
+
+        #expect(model.finishedTimeInZone["Z1"] == 60)
+        #expect(!model.finishedTimeInZone.isEmpty)
+    }
+
+    /// Same regression, `end()`'s own catch branch. This one already assigned
+    /// `finishedTimeInZone` before the fix (both `end()` branches ran the
+    /// assignment ahead of the `do`/`catch`), but it's covered here too so the
+    /// funnelling refactor can't quietly break it later.
+    @Test func zoneTimeSurvivesAFailedEnd() async {
+        let (model, recorder, _) = makeModel()
+        await model.start(.openEasyRun)
+        recorder.emit(LiveMetrics(elapsed: 300, distanceMeters: 900, heartRate: 140))
+        await waitUntil { model.state.distanceMeters == 900 }
+        recorder.emit(LiveMetrics(elapsed: 360, distanceMeters: 1_000, heartRate: 140))
+        await waitUntil { model.state.timeInZone["Z1"] == 60 }
+
+        recorder.endError = WorkoutRecordingError.sessionFailed(URLError(.timedOut))
+        await model.end()
+
+        guard case .finished = model.phase else {
+            Issue.record("expected a summary, got \(model.phase)")
+            return
+        }
+        #expect(model.finishedTimeInZone["Z1"] == 60)
+        #expect(!model.finishedTimeInZone.isEmpty)
+    }
 }

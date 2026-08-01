@@ -10,6 +10,10 @@ struct SummaryView: View {
     let onDone: () -> Void
 
     private var shares: [ZoneShare] { zoneShares(timeInZone: timeInZone) }
+    /// Whole-percent labels, positionally aligned with `shares`, that sum to
+    /// exactly 100 — see `zonePercentages` for why rounding each row
+    /// independently can't be trusted to do that.
+    private var percentages: [Int] { zonePercentages(shares) }
 
     var body: some View {
         ScrollView {
@@ -40,7 +44,7 @@ struct SummaryView: View {
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.secondary)
                         ZoneBreakdownBar(timeInZone: timeInZone, height: 10)
-                        ForEach(shares, id: \.zone.id) { share in
+                        ForEach(Array(zip(shares, percentages)), id: \.0.zone.id) { share, percentage in
                             HStack(spacing: 5) {
                                 Circle()
                                     .fill(share.zone.color)
@@ -52,7 +56,7 @@ struct SummaryView: View {
                                     .monospacedDigit()
                                     .foregroundStyle(.secondary)
                                 Spacer(minLength: 0)
-                                Text("\(Int((share.fraction * 100).rounded()))%")
+                                Text("\(percentage)%")
                                     .font(.system(size: 11))
                                     .monospacedDigit()
                                     .foregroundStyle(.secondary)
