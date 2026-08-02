@@ -462,20 +462,308 @@ git commit -m "feat: per-week and per-day plan completion, effectivePlan seam"
 
 ---
 
-### Task 3: The week list
+### Task 3: The day detail, and starting from it
 
-Nine rows, one per week, each showing where the athlete stands in it. This is the browser's entry point.
+The leaf of the browser, built first so every later view links to something that already exists. Shows the notes and structure the list rows cannot fit, and starts the session.
+
+Starting from three levels deep is safe: `RootView` gives each `model.phase` its own `NavigationStack`, so a phase change to `.running` tears the whole stack down rather than swapping a root beneath pushed views. That was the E7 navigation bug and its fix — do not add a `NavigationPath` or a dismissal here.
+
+**Files:**
+- Create: `FitBud Watch App/UI/PlanDayDetailView.swift`
+
+**Interfaces:**
+- Consumes: `run(on:from:)` (Task 2); `WorkoutConfiguration(planDay:)` and `model.start(_:)`, both existing; `formatPace(_:)` from `Support/DurationFormatting.swift`.
+- Produces: `PlanDayDetailView(day:runs:model:today:)` — navigated to by `PlanWeekDetailView` in Task 4.
+
+- [ ] **Step 1: Create `PlanDayDetailView.swift`**
+
+```swift
+import SwiftUI
+
+/// One day of the plan in full: what it asks for, why, and a way to start it.
+struct PlanDayDetailView: View {
+    let day: PlanDay
+    let runs: [HistoricRun]
+    let model: WorkoutSessionModel
+    let today: Date
+
+    private var completed: HistoricRun? { run(on: day, from: runs) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                header
+                if let completed { completedCard(completed) }
+                if !day.segments.isEmpty { segmentsCard }
+                if !day.notes.isEmpty {
+                    Text(day.notes)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if day.isRunningSession { startButton }
+            }
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .navigationTitle(day.dow)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(day.date)
+                .font(Theme.captionFont)
+                .foregroundStyle(.secondary)
+            Text(day.title)
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .fixedSize(horizontal: false, vertical: true)
+            if let detail = plannedDetail {
+                Text(detail)
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// Target, zone with its real bpm range, and run/walk ratio — the same
+    /// grammar the home screen's today card uses, so the two agree.
+    private var plannedDetail: String? {
+        var parts: [String] = []
+        if day.targetKm > 0 { parts.append(String(format: "%.0f km", day.targetKm)) }
+        if day.targetMin > 0 { parts.append("\(Int(day.targetMin)) min") }
+        if let zone = day.zone, let hrZone = HRZone.table.first(where: { $0.id == zone }) {
+            parts.append("\(zone) \(hrZone.lowerBPM)–\(hrZone.upperBPM) bpm")
+        }
+        if let runWalk = day.runWalk {
+            parts.append("run \(Int(runWalk.runMin))′/walk \(Int(runWalk.walkMin))′")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func completedCard(_ completedRun: HistoricRun) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("COMPLETED")
+                .font(Theme.captionFont)
+                .foregroundStyle(.green)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(String(format: "%.2f", completedRun.distanceKm))
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                Text("KM")
+                    .font(Theme.captionFont)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Text(completedRun.paceSecPerKm.map { "\(formatPace($0))/km" } ?? "--")
+                    .font(.system(size: 12))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            if let heartRate = completedRun.averageHeartRate {
+                Text("\(Int(heartRate)) bpm average · \(completedRun.zone?.name ?? "no zone")")
+                    .font(.system(size: 10))
+                    .foregroundStyle(completedRun.isEasy ? .green : .orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var segmentsCard: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("STRUCTURE")
+                .font(Theme.captionFont)
+                .foregroundStyle(.secondary)
+            ForEach(Array(day.segments.enumerated()), id: \.offset) { _, segment in
+                Text(describe(segment))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func describe(_ segment: PlanSegment) -> String {
+        switch segment {
+        case let .warmup(minutes, zone, _):
+            "Warm up \(Int(minutes)) min · \(zone)"
+        case let .cooldown(minutes, zone, _):
+            "Cool down \(Int(minutes)) min · \(zone)"
+        case let .repeatBlock(times, work, recover):
+            "\(times) × \(Int(work.minutes)) min \(work.zone), \(Int(recover.minutes)) min \(recover.zone)"
+        }
+    }
+
+    /// Any running session can be started, including a future one — the athlete
+    /// may legitimately want to run Sunday's long run on Saturday, and the date
+    /// is shown right above this button so the choice is informed.
+    private var startButton: some View {
+        Button {
+            Task { await model.start(WorkoutConfiguration(planDay: day)) }
+        } label: {
+            Label(completed == nil ? "Start" : "Run it again", systemImage: "figure.run")
+                .frame(maxWidth: .infinity)
+        }
+        .tint(HRZone.table.first { $0.id == day.zone }?.color ?? .green)
+    }
+}
+```
+
+Note the parameter of `completedCard` is named `completedRun`, not `run`: a parameter called `run` would shadow the global `run(on:from:)` this file also calls, and leaving that to overload resolution is a trap for whoever edits next.
+
+- [ ] **Step 2: Build**
+
+```bash
+xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" \
+  -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" build 2>&1 | tail -5
+```
+Expected: `** BUILD SUCCEEDED **`. This view is not yet reachable from anywhere, which is expected — Task 4 links to it.
+
+- [ ] **Step 3: Run the full suite**
+
+Run the test command from Global Constraints.
+Expected: PASS, **204 tests** (no new tests — this view is verified by screenshot in Task 6).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add "FitBud Watch App/UI/PlanDayDetailView.swift"
+git commit -m "feat: plan day detail, with structure and a start button"
+```
+
+---
+
+### Task 4: The week detail — seven days
+
+**Files:**
+- Create: `FitBud Watch App/UI/PlanWeekDetailView.swift`
+
+**Interfaces:**
+- Consumes: `run(on:from:)` (Task 2); `PlanDayDetailView(day:runs:model:today:)` (Task 3); `formatPace(_:)` from `Support/DurationFormatting.swift`.
+- Produces: `PlanWeekDetailView(week:runs:model:today:)` — navigated to by `PlanWeekListView` in Task 5.
+
+- [ ] **Step 1: Create `PlanWeekDetailView.swift`**
+
+```swift
+import SwiftUI
+
+/// One week of the block, day by day.
+struct PlanWeekDetailView: View {
+    let week: PlanWeek
+    let runs: [HistoricRun]
+    let model: WorkoutSessionModel
+    let today: Date
+
+    private var todayKey: String { TrainingPlan.dayKey(for: today) }
+
+    var body: some View {
+        List {
+            ForEach(week.days, id: \.date) { day in
+                NavigationLink {
+                    PlanDayDetailView(day: day, runs: runs, model: model, today: today)
+                } label: {
+                    row(for: day)
+                }
+            }
+        }
+        .listStyle(.carousel)
+        .navigationTitle(week.index == 0 ? "Bridge" : "Week \(week.index)")
+    }
+
+    @ViewBuilder private func row(for day: PlanDay) -> some View {
+        let completed = run(on: day, from: runs)
+        let isToday = day.date == todayKey
+
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Text(day.dow.uppercased())
+                    .font(Theme.captionFont)
+                    .foregroundStyle(isToday ? Color.green : Color.secondary)
+                if isToday {
+                    Text("TODAY")
+                        .font(Theme.captionFont)
+                        .foregroundStyle(.green)
+                }
+                Spacer(minLength: 0)
+                if let completed {
+                    // The tick answers "did I do it"; the dot's colour answers
+                    // "was it easy", which is the rule the whole plan turns on.
+                    Circle()
+                        .fill(completed.zone?.color ?? .gray.opacity(0.5))
+                        .frame(width: 7, height: 7)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.green)
+                }
+            }
+
+            Text(day.title)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundStyle(day.isRunningSession ? .primary : .secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let detail = detail(for: day) {
+                Text(detail)
+                    .font(.system(size: 10))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The planned shape of the day, or what was actually run once there is a
+    /// recording to report instead.
+    private func detail(for day: PlanDay) -> String? {
+        if let completed = run(on: day, from: runs) {
+            let pace = completed.paceSecPerKm.map { " · \(formatPace($0))/km" } ?? ""
+            return String(format: "%.1f km", completed.distanceKm) + pace
+        }
+        var parts: [String] = []
+        if day.targetKm > 0 { parts.append(String(format: "%.0f km", day.targetKm)) }
+        else if day.targetMin > 0 { parts.append("\(Int(day.targetMin)) min") }
+        if let zone = day.zone { parts.append(zone) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+```
+
+- [ ] **Step 2: Build**
+
+```bash
+xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" \
+  -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" build 2>&1 | tail -5
+```
+Expected: `** BUILD SUCCEEDED **`.
+
+- [ ] **Step 3: Run the full suite**
+
+Expected: PASS, **204 tests**.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add "FitBud Watch App/UI/PlanWeekDetailView.swift"
+git commit -m "feat: plan week detail, seven days with completion marks"
+```
+
+---
+
+### Task 5: The week list
+
+Nine rows, one per week, each showing where the athlete stands in it. This is the browser's entry point and the last of the three views.
 
 `HomeView` has a private `progressBar(fraction:color:)` that this view needs too. Extract it into `Theme.swift` beside `CaptionLabel` rather than writing a second copy.
 
 **Files:**
 - Modify: `FitBud Watch App/UI/Theme.swift`
-- Create: `FitBud Watch App/UI/PlanWeekListView.swift`
 - Modify: `FitBud Watch App/UI/HomeView.swift:261-271` (delete the private bar, use the shared one)
+- Create: `FitBud Watch App/UI/PlanWeekListView.swift`
 
 **Interfaces:**
-- Consumes: `weekCompletion(week:runs:)`, `WeekCompletion.volumeFraction` (Task 2).
-- Produces: `ProgressTrack(fraction:color:)`; `PlanWeekListView(plan:runs:model:today:)`.
+- Consumes: `weekCompletion(week:runs:)` and `WeekCompletion.volumeFraction` (Task 2); `PlanWeekDetailView(week:runs:model:today:)` (Task 4).
+- Produces: `ProgressTrack(fraction:color:)`; `PlanWeekListView(plan:runs:model:today:)` — linked from `HomeView` in Task 6.
 
 - [ ] **Step 1: Add `ProgressTrack` to `Theme.swift`**
 
@@ -594,20 +882,17 @@ struct PlanWeekListView: View {
 }
 ```
 
-- [ ] **Step 4: Build to verify it compiles**
-
-The view is not yet reachable from anywhere; `PlanWeekDetailView` does not exist yet.
-Expected: FAIL — `cannot find 'PlanWeekDetailView' in scope`. This is expected and is resolved by Task 4. To keep this task independently verifiable, temporarily replace the `NavigationLink` destination with `Text(week.focus)` and build:
+- [ ] **Step 4: Build**
 
 ```bash
 xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" \
   -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" build 2>&1 | tail -5
 ```
-Expected: `** BUILD SUCCEEDED **`. Then restore the `PlanWeekDetailView` destination before committing — Task 4 makes it compile.
+Expected: `** BUILD SUCCEEDED **`.
 
 - [ ] **Step 5: Run the full suite**
 
-Expected: PASS, **204 tests** (no new tests; `ProgressTrack` and the list are verified by screenshot in Task 6). The existing suite must still be green after the `HomeView` bar swap.
+Expected: PASS, **204 tests**. The existing suite must still be green after the `HomeView` bar swap.
 
 - [ ] **Step 6: Commit**
 
@@ -619,294 +904,6 @@ git commit -m "feat: plan week list, with a shared progress track"
 ```
 
 ---
-
-### Task 4: The week detail — seven days
-
-**Files:**
-- Create: `FitBud Watch App/UI/PlanWeekDetailView.swift`
-
-**Interfaces:**
-- Consumes: `run(on:from:)` (Task 2); navigated to by `PlanWeekListView` (Task 3).
-- Produces: `PlanWeekDetailView(week:runs:model:today:)`.
-
-- [ ] **Step 1: Create `PlanWeekDetailView.swift`**
-
-```swift
-import SwiftUI
-
-/// One week of the block, day by day.
-struct PlanWeekDetailView: View {
-    let week: PlanWeek
-    let runs: [HistoricRun]
-    let model: WorkoutSessionModel
-    let today: Date
-
-    private var todayKey: String { TrainingPlan.dayKey(for: today) }
-
-    var body: some View {
-        List {
-            ForEach(week.days, id: \.date) { day in
-                NavigationLink {
-                    PlanDayDetailView(day: day, runs: runs, model: model, today: today)
-                } label: {
-                    row(for: day)
-                }
-            }
-        }
-        .listStyle(.carousel)
-        .navigationTitle(week.index == 0 ? "Bridge" : "Week \(week.index)")
-    }
-
-    @ViewBuilder private func row(for day: PlanDay) -> some View {
-        let completed = run(on: day, from: runs)
-        let isToday = day.date == todayKey
-
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Text(day.dow.uppercased())
-                    .font(Theme.captionFont)
-                    .foregroundStyle(isToday ? Color.green : Color.secondary)
-                if isToday {
-                    Text("TODAY")
-                        .font(Theme.captionFont)
-                        .foregroundStyle(.green)
-                }
-                Spacer(minLength: 0)
-                if let completed {
-                    // The tick answers "did I do it"; the dot's colour answers
-                    // "was it easy", which is the rule the whole plan turns on.
-                    Circle()
-                        .fill(completed.zone?.color ?? .gray.opacity(0.5))
-                        .frame(width: 7, height: 7)
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.green)
-                }
-            }
-
-            Text(day.title)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(day.isRunningSession ? .primary : .secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let detail = detail(for: day) {
-                Text(detail)
-                    .font(.system(size: 10))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// The planned shape of the day, or what was actually run once there is a
-    /// recording to report instead.
-    private func detail(for day: PlanDay) -> String? {
-        if let completed = run(on: day, from: runs) {
-            let pace = completed.paceSecPerKm.map { " · \(formatPace($0))/km" } ?? ""
-            return String(format: "%.1f km", completed.distanceKm) + pace
-        }
-        var parts: [String] = []
-        if day.targetKm > 0 { parts.append(String(format: "%.0f km", day.targetKm)) }
-        else if day.targetMin > 0 { parts.append("\(Int(day.targetMin)) min") }
-        if let zone = day.zone { parts.append(zone) }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-}
-```
-
-- [ ] **Step 2: Build to verify it compiles**
-
-Expected: FAIL — `cannot find 'PlanDayDetailView' in scope`. Temporarily replace the destination with `Text(day.title)`, build to `** BUILD SUCCEEDED **`, then restore it before committing — Task 5 makes it compile.
-
-- [ ] **Step 3: Run the full suite**
-
-Expected: PASS, **204 tests**.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add "FitBud Watch App/UI/PlanWeekDetailView.swift"
-git commit -m "feat: plan week detail, seven days with completion marks"
-```
-
----
-
-### Task 5: The day detail, and starting from it
-
-The leaf. Shows the notes and structure the list rows cannot fit, and starts the session.
-
-Starting from three levels deep is safe: `RootView` gives each `model.phase` its own `NavigationStack`, so a phase change to `.running` tears the whole stack down rather than swapping a root beneath pushed views. That was the E7 navigation bug and its fix — do not add a `NavigationPath` or a dismissal here.
-
-**Files:**
-- Create: `FitBud Watch App/UI/PlanDayDetailView.swift`
-
-**Interfaces:**
-- Consumes: `run(on:from:)` (Task 2); `WorkoutConfiguration(planDay:)` and `model.start(_:)`, both existing.
-- Produces: `PlanDayDetailView(day:runs:model:today:)`.
-
-- [ ] **Step 1: Create `PlanDayDetailView.swift`**
-
-```swift
-import SwiftUI
-
-/// One day of the plan in full: what it asks for, why, and a way to start it.
-struct PlanDayDetailView: View {
-    let day: PlanDay
-    let runs: [HistoricRun]
-    let model: WorkoutSessionModel
-    let today: Date
-
-    private var completed: HistoricRun? { run(on: day, from: runs) }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                header
-                if let completed { completedCard(completed) }
-                if !day.segments.isEmpty { segmentsCard }
-                if !day.notes.isEmpty {
-                    Text(day.notes)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if day.isRunningSession { startButton }
-            }
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .navigationTitle(day.dow)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(day.date)
-                .font(Theme.captionFont)
-                .foregroundStyle(.secondary)
-            Text(day.title)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .fixedSize(horizontal: false, vertical: true)
-            if let detail = plannedDetail {
-                Text(detail)
-                    .font(.system(size: 11))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    /// Target, zone with its real bpm range, and run/walk ratio — the same
-    /// grammar the home screen's today card uses, so the two agree.
-    private var plannedDetail: String? {
-        var parts: [String] = []
-        if day.targetKm > 0 { parts.append(String(format: "%.0f km", day.targetKm)) }
-        if day.targetMin > 0 { parts.append("\(Int(day.targetMin)) min") }
-        if let zone = day.zone, let hrZone = HRZone.table.first(where: { $0.id == zone }) {
-            parts.append("\(zone) \(hrZone.lowerBPM)–\(hrZone.upperBPM) bpm")
-        }
-        if let runWalk = day.runWalk {
-            parts.append("run \(Int(runWalk.runMin))′/walk \(Int(runWalk.walkMin))′")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private func completedCard(_ run: HistoricRun) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("COMPLETED")
-                .font(Theme.captionFont)
-                .foregroundStyle(.green)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(String(format: "%.2f", run.distanceKm))
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                Text("KM")
-                    .font(Theme.captionFont)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                Text(run.paceSecPerKm.map { "\(formatPace($0))/km" } ?? "--")
-                    .font(.system(size: 12))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-            if let heartRate = run.averageHeartRate {
-                Text("\(Int(heartRate)) bpm average · \(run.zone?.name ?? "no zone")")
-                    .font(.system(size: 10))
-                    .foregroundStyle(run.isEasy ? .green : .orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private var segmentsCard: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("STRUCTURE")
-                .font(Theme.captionFont)
-                .foregroundStyle(.secondary)
-            ForEach(Array(day.segments.enumerated()), id: \.offset) { _, segment in
-                Text(describe(segment))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func describe(_ segment: PlanSegment) -> String {
-        switch segment {
-        case let .warmup(minutes, zone, _):
-            "Warm up \(Int(minutes)) min · \(zone)"
-        case let .cooldown(minutes, zone, _):
-            "Cool down \(Int(minutes)) min · \(zone)"
-        case let .repeatBlock(times, work, recover):
-            "\(times) × \(Int(work.minutes)) min \(work.zone), \(Int(recover.minutes)) min \(recover.zone)"
-        }
-    }
-
-    /// Any running session can be started, including a future one — the athlete
-    /// may legitimately want to run Sunday's long run on Saturday, and the date
-    /// is shown right above this button so the choice is informed.
-    private var startButton: some View {
-        Button {
-            Task { await model.start(WorkoutConfiguration(planDay: day)) }
-        } label: {
-            Label(completed == nil ? "Start" : "Run it again", systemImage: "figure.run")
-                .frame(maxWidth: .infinity)
-        }
-        .tint(HRZone.table.first { $0.id == day.zone }?.color ?? .green)
-    }
-}
-```
-
-- [ ] **Step 2: Restore the real destinations in Tasks 3 and 4**
-
-Confirm `PlanWeekListView`'s `NavigationLink` destination is `PlanWeekDetailView(week:runs:model:today:)` and `PlanWeekDetailView`'s is `PlanDayDetailView(day:runs:model:today:)`.
-
-- [ ] **Step 3: Build**
-
-```bash
-xcodebuild -project FitBud.xcodeproj -scheme "FitBud Watch App" \
-  -destination "id=ABFC4C29-F866-4D1D-9A8F-345DFAFF82F5" build 2>&1 | tail -5
-```
-Expected: `** BUILD SUCCEEDED **`.
-
-- [ ] **Step 4: Run the full suite**
-
-Expected: PASS, **204 tests**.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add "FitBud Watch App/UI/PlanDayDetailView.swift" \
-        "FitBud Watch App/UI/PlanWeekListView.swift" \
-        "FitBud Watch App/UI/PlanWeekDetailView.swift"
-git commit -m "feat: plan day detail, with structure and a start button"
-```
-
----
-
 ### Task 6: Wire it to the home screen and verify end to end
 
 Also fixes a standing misnomer: the home screen's **All sessions** link goes to `SessionListView`, which offers three hardcoded ad-hoc workouts and has nothing to do with the plan. With a real plan browser one tap away, that name is actively wrong.
@@ -1022,3 +1019,56 @@ Recorded here so this plan's reviewers know what is deliberately absent, not for
 `PlanOverlay` persistence, `PlanProjection`, `PlanDivergence`, `MutationValidator`, `AIProviding.adapt()`, `ProposalView`, and the `●  adjusted · was 19` badges on the week rows.
 
 The seam they land in is `PlanStore.effectivePlan()` from Task 2. The spec writes that method as `effectivePlan(overlay:)`; this plan ships it as `effectivePlan(name:)` with no overlay parameter, because `PlanOverlay` does not exist yet and a parameter nothing can supply is a type invented on speculation. Plan B adds the parameter then — and the change is cheap, because **`HomeModel.load(asOf:)` is the only call site in the app**. Every view here receives its `TrainingPlan` as a parameter and never loads one itself, so no view built in this plan needs changing.
+
+---
+
+## Execution record
+
+Executed subagent-driven on branch `feature/plan-browser`, 7 commits, suite 193 → 204.
+
+**One plan defect found in the pre-flight scan and fixed before Task 1.** Tasks 3–5
+originally built the three views top-down, so Task 3's commit referenced
+`PlanWeekDetailView` before it existed — a commit that cannot compile, followed by a
+step demanding "204 tests PASS". The plan also mandated stubbing a `NavigationLink`
+destination, building, then restoring it before commit, which leaves the committed tree
+broken. Reversed to bottom-up: Task 3 = `PlanDayDetailView` (leaf), Task 4 =
+`PlanWeekDetailView`, Task 5 = `PlanWeekListView`. Every commit now compiles alone and
+all stubbing steps are gone. No requirement was added, removed, or reinterpreted.
+
+**One item parked.** Tapping Start does not navigate to the Effort page on the
+simulator. Ruled pre-existing and environmental, not a regression: `git diff main..HEAD`
+is empty for `UI/WorkoutSessionModel.swift`, `Health/` and `UI/RootView.swift`; the same
+hang reproduces on Home's own unmodified Start button; the Demo run — same `RootView`
+phase-switch teardown, fake recorder — navigates instantly; and `RootView` still gives
+each phase its own `NavigationStack`, so the E7 fix is structurally intact. Almost
+certainly `HKWorkoutSession`/`beginCollection` hanging on a watchOS simulator with no
+paired device. **Still owed a real-device check.**
+
+## Known follow-ups
+
+None block merge; all were triaged as acceptable-to-defer by the final whole-branch
+review. Ordered by value.
+
+1. **Three divergent implementations of "describe a planned day"** — the best candidate
+   for Plan B's opening work, since Plan B touches these views anyway.
+   `HomeView.sessionDetail` omits `targetMin` entirely and returns `""` rather than
+   `nil`; `PlanWeekDetailView.detail(for:)` uses `if km / else if min` and a bare zone;
+   `PlanDayDetailView.plannedDetail` uses two independent `if`s and renders the zone
+   with its bpm range. No day in the current plan sets both `targetKm` and `targetMin`,
+   so nothing is dropped today — but Home shows no duration at all for min-only days
+   (strength, cross-training, and week 0's 2026-08-01). One
+   `PlanDay.plannedSummary(verbosity:)` in `Models/` would collapse all three.
+2. **`WorkoutSessionModel:169,374` and `CoachContext:106` still call `loadBundled()`** —
+   already recorded in the spec's §12 as a Plan B prerequisite. Harmless while the two
+   functions are identical; a real defect the moment they are not.
+3. **`PlanWeekListView`'s bar gate** uses `completedSessions > 0`. Gating a *volume* bar
+   on `completedKm > 0` is the semantic fix — one word. Reachable today because
+   `WorkoutHistoryReading` coerces a missing distance sample to `0`.
+4. **`run(on:from:)` uses `.first`** — two runs on one day count as 2 in the week list
+   but render one tick and one card.
+5. **`WeekCompletion` duplicates four `BlockProgress` fields** and copies
+   `volumeFraction` verbatim; `BlockProgress` should compose a `WeekCompletion`.
+6. **"RECENT RUNS" on Home** can now surface runs up to nine weeks old, since the
+   history window widened from 14 days to the whole block.
+7. **Pre-existing, outside this diff:** `HomeView.swift:111`
+   `Text(sessionDetail(today))` wraps and lacks `.fixedSize`.
