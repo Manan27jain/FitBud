@@ -14,10 +14,12 @@ enum PlanStoreError: LocalizedError {
     }
 }
 
-/// Loads the training plan that ships with the app.
+/// Loads the training plan.
 ///
-/// Stage 4 will rewrite the plan in place after each week; this loader is where
-/// that persisted copy will take precedence over the bundled one.
+/// `loadBundled` returns the plan exactly as it ships. `effectivePlan` returns
+/// the plan as the athlete should see it — today those are the same thing, and
+/// every view goes through `effectivePlan` so that when accepted adaptations
+/// arrive they apply in one place rather than at every call site.
 enum PlanStore {
     static let bundledPlanName = "half-2026-09-27"
 
@@ -30,5 +32,11 @@ enum PlanStore {
         } catch {
             throw PlanStoreError.undecodable(error)
         }
+    }
+
+    /// The plan with any accepted adaptations applied. Identical to
+    /// `loadBundled` until Plan B introduces the overlay.
+    static func effectivePlan(name: String = bundledPlanName) throws -> TrainingPlan {
+        try loadBundled(name: name)
     }
 }

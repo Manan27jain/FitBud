@@ -32,8 +32,9 @@ final class HomeModel {
         isLoading = true
         defer { isLoading = false }
 
+        let plan: TrainingPlan
         do {
-            let plan = try PlanStore.loadBundled()
+            plan = try PlanStore.effectivePlan()
             self.plan = plan
             today = plan.day(on: date)
         } catch {
@@ -41,9 +42,13 @@ final class HomeModel {
             return
         }
 
-        // Two weeks back covers the current week plus enough context for the
-        // recent-runs list without pulling the athlete's whole history.
-        let since = Calendar.current.date(byAdding: .day, value: -14, to: date) ?? date
+        // The plan browser shows completion for every week of the block, not
+        // just the fortnight the home cards read, so the window is the block
+        // itself. Runs before it belong to no plan week and would be filtered
+        // out anyway. HealthKit returns these newest-first, so the home
+        // screen's `recentRuns.prefix(4)` still shows the most recent four.
+        let fallback = Calendar.current.date(byAdding: .day, value: -14, to: date) ?? date
+        let since = plan.startDate ?? fallback
         do {
             recentRuns = try await history.recentRuns(since: since)
         } catch {
@@ -52,8 +57,6 @@ final class HomeModel {
             recentRuns = []
         }
 
-        if let plan {
-            progress = blockProgress(plan: plan, runs: recentRuns, asOf: date)
-        }
+        progress = blockProgress(plan: plan, runs: recentRuns, asOf: date)
     }
 }
