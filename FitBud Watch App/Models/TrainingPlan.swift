@@ -107,6 +107,11 @@ struct TrainingPlan: Decodable, Equatable, Sendable {
 
     let planId: String
     let goal: Goal
+    /// Decoded as non-optional on purpose: a plan without its rules block is a
+    /// plan whose safety limits are unknown, and this project prefers to fail
+    /// loudly at decode time over running with silent defaults — the same
+    /// choice `PlanSegment` makes for an unknown segment kind.
+    let rules: PlanRules
     let weeks: [PlanWeek]
 }
 
@@ -142,5 +147,18 @@ extension TrainingPlan {
         guard let raceDay = formatter.date(from: goal.date),
               let today = formatter.date(from: Self.dayKey(for: date)) else { return 0 }
         return Calendar.current.dateComponents([.day], from: today, to: raceDay).day ?? 0
+    }
+
+    /// The block's first calendar day, for bounding history queries.
+    ///
+    /// Builds its own formatter rather than sharing a static one: `DateFormatter`
+    /// is a non-`Sendable` class, and the two methods above already take this
+    /// approach for the same reason.
+    var startDate: Date? {
+        guard let first = weeks.first?.start else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: first)
     }
 }

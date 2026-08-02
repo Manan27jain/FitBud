@@ -97,6 +97,31 @@ struct TrainingPlanTests {
         #expect(plan.day(on: try date("2026-10-05")) == nil)
     }
 
+    @Test func decodesTheProgressionCaps() throws {
+        let plan = try loadPlan()
+        #expect(plan.rules.progressionCaps.weeklyKmIncreaseMax == 0.2)
+        #expect(plan.rules.progressionCaps.longRunIncreaseMaxKm == 2.0)
+    }
+
+    @Test func decodesTheImmutableRulesAsProse() throws {
+        let plan = try loadPlan()
+        // Four rules, kept as text: they are displayed to the athlete and
+        // enforced in code, never parsed.
+        #expect(plan.rules.immutable.count == 4)
+        #expect(plan.rules.immutable.contains { $0.contains("Week 4 cutback") })
+        #expect(plan.rules.immutable.contains { $0.contains("Long run never exceeds 16km") })
+    }
+
+    @Test func decodesTheZoneDisciplineRule() throws {
+        let plan = try loadPlan()
+        #expect(plan.rules.zoneDiscipline.contains("80%"))
+    }
+
+    @Test func exposesTheBlockStartDate() throws {
+        let plan = try loadPlan()
+        #expect(TrainingPlan.dayKey(for: try #require(plan.startDate)) == "2026-08-01")
+    }
+
     private func date(_ string: String) throws -> Date {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
