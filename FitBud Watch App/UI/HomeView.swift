@@ -183,7 +183,7 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                progressBar(fraction: progress.volumeFraction, color: .green)
+                ProgressTrack(fraction: progress.volumeFraction)
 
                 Text(progress.weekFocus)
                     .font(.system(size: 10))
@@ -213,7 +213,7 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                progressBar(fraction: easyShare, color: onTarget ? .green : .orange)
+                ProgressTrack(fraction: easyShare, color: onTarget ? .green : .orange)
 
                 // The plan's single most important rule, so it says out loud
                 // what to do rather than leaving a number to be interpreted.
@@ -256,17 +256,5 @@ struct HomeView: View {
                 }
             }
         }
-    }
-
-    private func progressBar(fraction: Double, color: Color) -> some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.12))
-                Capsule()
-                    .fill(color)
-                    .frame(width: max(2, geometry.size.width * fraction))
-            }
-        }
-        .frame(height: 6)
     }
 }

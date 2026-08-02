@@ -132,3 +132,27 @@ struct CaptionLabel: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 }
+
+/// The thin capsule bar used wherever the app shows completed-against-planned.
+///
+/// Lives here beside `CaptionLabel` because it is now used by both the home
+/// screen and the plan browser, and two copies of a progress bar drift the way
+/// the five live pages' typography drifted before `Theme` existed.
+struct ProgressTrack: View {
+    let fraction: Double
+    var color: Color = .green
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.12))
+                Capsule()
+                    .fill(color)
+                    // A floor of 2pt so a barely-started week still shows a
+                    // mark rather than an empty track that reads as "no data".
+                    .frame(width: max(2, geometry.size.width * fraction))
+            }
+        }
+        .frame(height: 6)
+    }
+}
