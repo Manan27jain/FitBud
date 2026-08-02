@@ -352,6 +352,11 @@ an always-empty overlay), build the three browse views, rename **All sessions** 
 
 **Plan B — adaptation.** Projection, divergence, validator, overlay persistence,
 `adapt()`, the proposal UI, and the adjusted badges the browser already has room for.
+Before any of that lands, Plan B must migrate the three remaining
+`PlanStore.loadBundled()` call sites — `WorkoutSessionModel.swift:169`,
+`WorkoutSessionModel.swift:374`, and `CoachContext.swift:106` — onto
+`effectivePlan()`; otherwise the live workout and the AI coach's context keep
+reading the un-adapted plan while the browser shows the adapted one.
 
 Built as one plan, nothing is verifiable until everything works. Built as two, the first
 delivers value on its own and the second has a surface to render into.

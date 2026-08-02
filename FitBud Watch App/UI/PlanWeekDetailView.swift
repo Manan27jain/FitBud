@@ -13,7 +13,7 @@ struct PlanWeekDetailView: View {
         List {
             ForEach(week.days, id: \.date) { day in
                 NavigationLink {
-                    PlanDayDetailView(day: day, runs: runs, model: model, today: today)
+                    PlanDayDetailView(day: day, runs: runs, model: model)
                 } label: {
                     row(for: day)
                 }

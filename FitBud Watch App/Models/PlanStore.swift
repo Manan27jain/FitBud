@@ -18,8 +18,15 @@ enum PlanStoreError: LocalizedError {
 ///
 /// `loadBundled` returns the plan exactly as it ships. `effectivePlan` returns
 /// the plan as the athlete should see it — today those are the same thing, and
-/// every view goes through `effectivePlan` so that when accepted adaptations
-/// arrive they apply in one place rather than at every call site.
+/// the seam exists so that when accepted adaptations arrive they apply in one
+/// place rather than at every call site.
+///
+/// `HomeModel` is the only caller on the seam so far. `WorkoutSessionModel` and
+/// `CoachContext` still read `loadBundled` directly, which is harmless while the
+/// two are identical and a real defect the moment they are not: a live workout
+/// would run the un-adapted targets while the plan screen showed the adapted
+/// ones. Migrating those three call sites is a prerequisite of the adaptation
+/// work, not an optional tidy-up.
 enum PlanStore {
     static let bundledPlanName = "half-2026-09-27"
 

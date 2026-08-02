@@ -5,7 +5,6 @@ struct PlanDayDetailView: View {
     let day: PlanDay
     let runs: [HistoricRun]
     let model: WorkoutSessionModel
-    let today: Date
 
     private var completed: HistoricRun? { run(on: day, from: runs) }
 
