@@ -37,7 +37,23 @@ struct HomeView: View {
                 easyCard
                 recentCard
 
-                NavigationLink("All sessions") {
+                if let plan = home.plan {
+                    NavigationLink("Training plan") {
+                        PlanWeekListView(
+                            plan: plan,
+                            runs: home.recentRuns,
+                            model: model,
+                            today: Date()
+                        )
+                    }
+                    .font(.footnote)
+                }
+
+                // Not the plan — three ad-hoc configurations for when the
+                // athlete wants something other than what today prescribes.
+                // It was called "All sessions", which is what the plan browser
+                // above actually is.
+                NavigationLink("Quick start") {
                     SessionListView(model: model)
                 }
                 .font(.footnote)
